@@ -1,0 +1,91 @@
+<?php /** @var \Nistruct\ContentAI\Block\Adminhtml\Seo\Form $block */ ?>
+<style>
+    .contentai-seo-page { max-width: 1180px; }
+    .contentai-seo-form { background: #fff; border: 1px solid #d6d6d6; }
+    .contentai-seo-header { border-bottom: 1px solid #e5e5e5; padding: 18px 22px; }
+    .contentai-seo-header h2 { font-size: 20px; margin: 0 0 6px; }
+    .contentai-seo-header p { color: #666; margin: 0; }
+    .contentai-seo-grid { display: grid; gap: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .contentai-seo-section { padding: 22px; }
+    .contentai-seo-section + .contentai-seo-section { border-left: 1px solid #e5e5e5; }
+    .contentai-seo-field { margin-bottom: 18px; }
+    .contentai-seo-field label { display: block; font-weight: 600; margin-bottom: 7px; }
+    .contentai-seo-field input, .contentai-seo-field select { max-width: 100%; width: 100%; }
+    .contentai-seo-note { color: #666; font-size: 12px; line-height: 1.45; margin: 6px 0 0; }
+    .contentai-seo-list { margin: 0; padding-left: 18px; }
+    .contentai-seo-actions { border-top: 1px solid #e5e5e5; padding: 18px 22px; text-align: right; }
+    .contentai-seo-running { color: #666; display: none; margin-right: 14px; }
+    .contentai-seo-form.is-submitting .contentai-seo-running { display: inline-block; }
+    @media (max-width: 900px) {
+        .contentai-seo-grid { grid-template-columns: 1fr; }
+        .contentai-seo-section + .contentai-seo-section { border-left: 0; border-top: 1px solid #e5e5e5; }
+    }
+</style>
+<div class="contentai-seo-page">
+    <form class="contentai-seo-form" action="<?= $block->escapeUrl($block->getPostUrl()) ?>" method="post" data-contentai-seo-form>
+        <?= $block->getBlockHtml('formkey') ?>
+        <div class="contentai-seo-header">
+            <h2><?= $block->escapeHtml(__('SEO Analyzer')) ?></h2>
+            <p><?= $block->escapeHtml(__('Scan products, categories, and CMS pages with their related URL rewrites, then review issues and recommendations in SEO Reports. This audit does not change any data.')) ?></p>
+        </div>
+        <div class="contentai-seo-grid">
+            <section class="contentai-seo-section">
+                <div class="contentai-seo-field">
+                    <label for="contentai_seo_scope"><?= $block->escapeHtml(__('Audit Scope')) ?></label>
+                    <select id="contentai_seo_scope" name="scope">
+                        <?php foreach ($block->getScopeOptions() as $value => $label): ?>
+                            <option value="<?= $block->escapeHtmlAttr($value) ?>"<?= $value === $block->getCurrentScope() ? ' selected="selected"' : '' ?>><?= $block->escapeHtml(__($label)) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="contentai-seo-field">
+                    <label for="contentai_seo_store_id"><?= $block->escapeHtml(__('Store View')) ?></label>
+                    <select id="contentai_seo_store_id" name="store_id">
+                        <?php foreach ($block->getStoreOptions() as $option): ?>
+                            <option value="<?= $block->escapeHtmlAttr((string) $option['value']) ?>"<?= (int) $option['value'] === $block->getCurrentStoreId() ? ' selected="selected"' : '' ?>><?= $block->escapeHtml((string) $option['label']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <p class="contentai-seo-note"><?= $block->escapeHtml(__('Related URL rewrites are checked inside each selected entity type for the chosen store view.')) ?></p>
+                </div>
+                <div class="contentai-seo-field">
+                    <label for="contentai_seo_limit"><?= $block->escapeHtml(__('Maximum Items Per Section')) ?></label>
+                    <input id="contentai_seo_limit" name="limit" type="number" min="1" max="500" value="<?= (int) $block->getCurrentLimit() ?>"/>
+                    <p class="contentai-seo-note"><?= $block->escapeHtml(__('Keep this moderate while testing. Use the next batch link in a report to continue from the next set.')) ?></p>
+                </div>
+                <div class="contentai-seo-field">
+                    <label for="contentai_seo_offset"><?= $block->escapeHtml(__('Start From Item')) ?></label>
+                    <input id="contentai_seo_offset" name="offset" type="number" min="0" step="1" value="<?= (int) $block->getCurrentOffset() ?>"/>
+                    <p class="contentai-seo-note"><?= $block->escapeHtml(__('Usually keep this at 0. Reports with more available items can open the next batch automatically.')) ?></p>
+                </div>
+            </section>
+            <section class="contentai-seo-section">
+                <h2><?= $block->escapeHtml(__('Checks Included')) ?></h2>
+                <ul class="contentai-seo-list">
+                    <li><?= $block->escapeHtml(__('Missing, short, long, and duplicate meta titles.')) ?></li>
+                    <li><?= $block->escapeHtml(__('Missing, short, long, and duplicate meta descriptions.')) ?></li>
+                    <li><?= $block->escapeHtml(__('Missing meta keywords where the project still uses them.')) ?></li>
+                    <li><?= $block->escapeHtml(__('Missing or suspicious URL keys.')) ?></li>
+                    <li><?= $block->escapeHtml(__('Active and legacy URL rewrites connected to each product, category, or CMS page.')) ?></li>
+                    <li><?= $block->escapeHtml(__('Duplicate, empty, suspicious, missing, or obsolete URL rewrite paths.')) ?></li>
+                </ul>
+            </section>
+        </div>
+        <div class="contentai-seo-actions">
+            <span class="contentai-seo-running"><?= $block->escapeHtml(__('Running SEO audit...')) ?></span>
+            <button type="button" class="action-default" onclick="location.href='<?= $block->escapeUrl($block->getReportUrl()) ?>'">
+                <span><?= $block->escapeHtml(__('View Reports')) ?></span>
+            </button>
+            <button type="submit" class="action-primary">
+                <span><?= $block->escapeHtml(__('Run SEO Audit')) ?></span>
+            </button>
+        </div>
+    </form>
+</div>
+<script>
+require(['jquery'], function ($) {
+    $('[data-contentai-seo-form]').on('submit', function () {
+        $(this).addClass('is-submitting');
+        $(this).find('button[type="submit"]').prop('disabled', true);
+    });
+});
+</script>

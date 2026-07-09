@@ -1,0 +1,115 @@
+<?php
+/** @var \Nistruct\ContentAI\Block\Adminhtml\Report\View $block */
+$report = $block->getReport();
+$fields = $block->getExpectedFieldRows();
+$productUrl = $block->getProductEditUrl();
+$categoryUrl = $block->getCategoryEditUrl();
+$entityUrl = $categoryUrl ?: $productUrl;
+$usageRows = $block->getUsageRows();
+?>
+<?php if ($report): ?>
+<style>
+    .contentai-report-page { width: 100%; }
+    .contentai-report-actions { margin-bottom: 18px; }
+    .contentai-report-summary { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 0 0 22px; }
+    .contentai-report-summary-item { background: #fff; border: 1px solid #d6d6d6; border-left: 4px solid #eb5202; padding: 14px 16px; }
+    .contentai-report-summary-label { color: #666; display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; text-transform: uppercase; }
+    .contentai-report-summary-item strong { color: #303030; display: block; font-size: 15px; overflow-wrap: anywhere; }
+    .contentai-report-usage { background: #fff; border: 1px solid #d6d6d6; display: grid; gap: 0; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin: -8px 0 22px; }
+    .contentai-report-usage-item { border-right: 1px solid #e5e5e5; padding: 12px 14px; }
+    .contentai-report-usage-label { color: #666; display: block; font-size: 11px; font-weight: 700; margin-bottom: 5px; text-transform: uppercase; }
+    .contentai-report-usage-value { font-weight: 600; overflow-wrap: anywhere; }
+    .contentai-report-panel { background: #fff; border: 1px solid #d6d6d6; }
+    .contentai-report-panel-title { background: #514943; color: #fff; font-weight: 600; padding: 13px 16px; }
+    .contentai-report-row { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 58px; }
+    .contentai-report-row + .contentai-report-row { border-top: 1px solid #e5e5e5; }
+    .contentai-report-field { background: #fafafa; border-right: 1px solid #e5e5e5; font-weight: 600; padding: 16px; }
+    .contentai-report-value { line-height: 1.45; overflow-wrap: anywhere; padding: 16px 18px; }
+    .contentai-report-value p:first-child, .contentai-report-value ul:first-child { margin-top: 0; }
+    .contentai-report-value p:last-child, .contentai-report-value ul:last-child { margin-bottom: 0; }
+    .contentai-report-value ul, .contentai-report-value ol { list-style-position: outside; margin-left: 0; padding-left: 22px; }
+    .contentai-report-value li { margin: 2px 0; padding-left: 2px; }
+    .contentai-report-empty { color: #777; }
+    .contentai-report-raw { background: #fff; border: 1px solid #d6d6d6; padding: 18px; }
+    .contentai-report-raw h2 { font-size: 18px; margin: 0 0 12px; }
+    .contentai-report-raw pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+    @media (max-width: 768px) {
+        .contentai-report-row { grid-template-columns: 1fr; }
+        .contentai-report-field { border-right: 0; border-bottom: 1px solid #e5e5e5; padding-bottom: 10px; }
+        .contentai-report-value { padding-top: 12px; }
+    }
+</style>
+<div class="contentai-report-page">
+    <div class="page-main-actions contentai-report-actions">
+        <div class="page-actions">
+            <div class="page-actions-buttons">
+                <button type="button" class="action-default" onclick="location.href='<?= $block->escapeUrl($block->getBackUrl()) ?>'">
+                    <span><?= $block->escapeHtml(__('Back')) ?></span>
+                </button>
+                <?php if ($entityUrl): ?>
+                    <button type="button" class="action-default" onclick="window.open('<?= $block->escapeUrl($entityUrl) ?>', '_blank')">
+                        <span><?= $block->escapeHtml(__('Open %1', $block->getEntityTypeLabel())) ?></span>
+                    </button>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <section class="contentai-report-summary">
+        <div class="contentai-report-summary-item">
+            <span class="contentai-report-summary-label"><?= $block->escapeHtml(__('Report ID')) ?></span>
+            <strong><?= (int) $report->getId() ?></strong>
+        </div>
+        <div class="contentai-report-summary-item">
+            <span class="contentai-report-summary-label"><?= $block->escapeHtml(__('Type')) ?></span>
+            <strong><?= $block->escapeHtml($block->getEntityTypeLabel()) ?></strong>
+        </div>
+        <div class="contentai-report-summary-item">
+            <span class="contentai-report-summary-label"><?= $block->escapeHtml(__($block->getEntityIdentifierLabel())) ?></span>
+            <strong><?= $block->escapeHtml($block->getEntityIdentifierValue()) ?></strong>
+        </div>
+        <div class="contentai-report-summary-item">
+            <span class="contentai-report-summary-label"><?= $block->escapeHtml(__('Source')) ?></span>
+            <strong><?= $block->escapeHtml(ucfirst((string) $report->getData('generator_type'))) ?></strong>
+        </div>
+        <div class="contentai-report-summary-item">
+            <span class="contentai-report-summary-label"><?= $block->escapeHtml(__('Created At')) ?></span>
+            <strong><?= $block->escapeHtml((string) $report->getData('created_at')) ?></strong>
+        </div>
+    </section>
+
+    <?php if ($usageRows): ?>
+        <section class="contentai-report-usage">
+            <?php foreach ($usageRows as $label => $value): ?>
+                <div class="contentai-report-usage-item">
+                    <span class="contentai-report-usage-label"><?= $block->escapeHtml(__($label)) ?></span>
+                    <span class="contentai-report-usage-value"><?= $block->escapeHtml($value) ?></span>
+                </div>
+            <?php endforeach; ?>
+        </section>
+    <?php endif; ?>
+
+    <?php if ($block->isFieldReport()): ?>
+        <div class="contentai-report-panel">
+            <div class="contentai-report-panel-title"><?= $block->escapeHtml(__('Generated Content')) ?></div>
+            <?php foreach ($fields as $code => $value): ?>
+                <div class="contentai-report-row">
+                    <div class="contentai-report-field"><?= $block->escapeHtml($block->getFieldLabel($code)) ?></div>
+                    <div class="contentai-report-value">
+                        <?php if ($value !== ''): ?>
+                            <?= /* @noEscape */ $value ?>
+                        <?php else: ?>
+                            <span class="contentai-report-empty">-</span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    <?php else: ?>
+        <div class="contentai-report-raw">
+            <h2><?= $block->escapeHtml(__('Generated Content')) ?></h2>
+            <pre><?= $block->escapeHtml($block->getRawContent()) ?></pre>
+        </div>
+    <?php endif; ?>
+</div>
+<?php endif; ?>

@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Backend:etc/menu.xsd">
+    <menu>
+        <add id="Nistruct_ContentAI::root" title="Nistruct" module="Nistruct_ContentAI" sortOrder="70" action="nistruct_contentai/bulk/index" resource="Nistruct_ContentAI::root" toolTip="Nistruct ContentAI"/>
+        <add id="Nistruct_ContentAI::bulk_menu" title="ContentAI Bulk Generator" module="Nistruct_ContentAI" action="nistruct_contentai/bulk/index" sortOrder="10" parent="Nistruct_ContentAI::root" resource="Nistruct_ContentAI::bulk"/>
+        <add id="Nistruct_ContentAI::report_menu" title="ContentAI Single Reports" module="Nistruct_ContentAI" action="nistruct_contentai/report/index" sortOrder="20" parent="Nistruct_ContentAI::root" resource="Nistruct_ContentAI::report"/>
+        <add id="Nistruct_ContentAI::bulk_report_menu" title="ContentAI Bulk Reports" module="Nistruct_ContentAI" action="nistruct_contentai/bulkreport/index" sortOrder="30" parent="Nistruct_ContentAI::root" resource="Nistruct_ContentAI::bulk_report"/>
+        <add id="Nistruct_ContentAI::seo_menu" title="ContentAI SEO Analyzer" module="Nistruct_ContentAI" action="nistruct_contentai/seo/index" sortOrder="40" parent="Nistruct_ContentAI::root" resource="Nistruct_ContentAI::seo"/>
+        <add id="Nistruct_ContentAI::seo_report_menu" title="ContentAI SEO Reports" module="Nistruct_ContentAI" action="nistruct_contentai/seoreport/index" sortOrder="50" parent="Nistruct_ContentAI::root" resource="Nistruct_ContentAI::seo_report"/>
+        <add id="Nistruct_ContentAI::configuration_menu" title="ContentAI Configuration" module="Nistruct_ContentAI" action="adminhtml/system_config/edit/section/contentai" sortOrder="60" parent="Nistruct_ContentAI::root" resource="Nistruct_ContentAI::configuration"/>
+    </menu>
+</config>

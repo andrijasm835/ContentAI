@@ -1,0 +1,107 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <tab id="nistruct" translate="label" sortOrder="110" class="nistruct-tab">
+            <label>Nistruct Extensions</label>
+        </tab>
+        <section id="contentai" translate="label" sortOrder="20" type="text" showInDefault="1" showInWebsite="1" showInStore="1">
+            <class>separator-top</class>
+            <label>ContentAI</label>
+            <tab>nistruct</tab>
+            <resource>Nistruct_ContentAI::configuration</resource>
+            <group id="general" translate="label" type="text" sortOrder="10" showInDefault="1">
+                <label>General</label>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1">
+                    <label>Enable</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="debug_log" translate="label" type="select" sortOrder="20" showInDefault="1">
+                    <label>Debug Logging</label>
+                    <comment><![CDATA[Log full request/response details. Enable only in development.]]></comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+            </group>
+            <group id="api" translate="label" type="text" sortOrder="20" showInDefault="1">
+                <label>API Configuration</label>
+                <field id="provider" translate="label" type="select" sortOrder="10" showInDefault="1">
+                    <label>Provider</label>
+                    <source_model>Nistruct\ContentAI\Model\Config\Source\Provider</source_model>
+                </field>
+                <field id="openai_api_key" translate="label" type="obscure" sortOrder="20" showInDefault="1">
+                    <label>OpenAI API Key</label>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                    <depends>
+                        <field id="provider">openai</field>
+                    </depends>
+                </field>
+                <field id="openai_model" translate="label" type="select" sortOrder="30" showInDefault="1">
+                    <label>OpenAI Model</label>
+                    <source_model>Nistruct\ContentAI\Model\Config\Source\OpenAiModel</source_model>
+                    <depends>
+                        <field id="provider">openai</field>
+                    </depends>
+                </field>
+                <field id="openai_max_tokens" translate="label" type="text" sortOrder="40" showInDefault="1">
+                    <label>OpenAI Max Output Tokens</label>
+                    <validate>required-entry validate-digits</validate>
+                    <depends>
+                        <field id="provider">openai</field>
+                    </depends>
+                </field>
+                <field id="openai_input_price" translate="label comment" type="text" sortOrder="45" showInDefault="1">
+                    <label>OpenAI Input Price / 1M Tokens</label>
+                    <comment><![CDATA[Optional. Used only for report cost estimates. Enter the current provider price in USD.]]></comment>
+                    <validate>validate-number</validate>
+                    <depends>
+                        <field id="provider">openai</field>
+                    </depends>
+                </field>
+                <field id="openai_output_price" translate="label comment" type="text" sortOrder="46" showInDefault="1">
+                    <label>OpenAI Output Price / 1M Tokens</label>
+                    <comment><![CDATA[Optional. Used only for report cost estimates. Enter the current provider price in USD.]]></comment>
+                    <validate>validate-number</validate>
+                    <depends>
+                        <field id="provider">openai</field>
+                    </depends>
+                </field>
+                <field id="anthropic_api_key" translate="label" type="obscure" sortOrder="50" showInDefault="1">
+                    <label>Anthropic API Key</label>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                    <depends>
+                        <field id="provider">anthropic</field>
+                    </depends>
+                </field>
+                <field id="anthropic_model" translate="label" type="select" sortOrder="60" showInDefault="1">
+                    <label>Anthropic Model</label>
+                    <source_model>Nistruct\ContentAI\Model\Config\Source\AnthropicModel</source_model>
+                    <depends>
+                        <field id="provider">anthropic</field>
+                    </depends>
+                </field>
+                <field id="anthropic_max_tokens" translate="label" type="text" sortOrder="70" showInDefault="1">
+                    <label>Anthropic Max Tokens</label>
+                    <validate>required-entry validate-digits</validate>
+                    <depends>
+                        <field id="provider">anthropic</field>
+                    </depends>
+                </field>
+                <field id="anthropic_input_price" translate="label comment" type="text" sortOrder="75" showInDefault="1">
+                    <label>Anthropic Input Price / 1M Tokens</label>
+                    <comment><![CDATA[Optional. Used only for report cost estimates. Enter the current provider price in USD.]]></comment>
+                    <validate>validate-number</validate>
+                    <depends>
+                        <field id="provider">anthropic</field>
+                    </depends>
+                </field>
+                <field id="anthropic_output_price" translate="label comment" type="text" sortOrder="76" showInDefault="1">
+                    <label>Anthropic Output Price / 1M Tokens</label>
+                    <comment><![CDATA[Optional. Used only for report cost estimates. Enter the current provider price in USD.]]></comment>
+                    <validate>validate-number</validate>
+                    <depends>
+                        <field id="provider">anthropic</field>
+                    </depends>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>

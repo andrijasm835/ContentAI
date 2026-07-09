@@ -1,0 +1,156 @@
+<?php
+/** @var \Nistruct\ContentAI\Block\Adminhtml\BulkReport\View $block */
+$report = $block->getReport();
+$products = $block->getProducts();
+$usageRows = $block->getUsageRows();
+?>
+<?php if ($report): ?>
+<style>
+    .contentai-bulk-report { width: 100%; }
+    .contentai-bulk-report-actions { margin-bottom: 18px; }
+    .contentai-bulk-summary { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin-bottom: 20px; }
+    .contentai-bulk-summary-item { background: #fff; border: 1px solid #d6d6d6; border-left: 4px solid #eb5202; padding: 14px 16px; }
+    .contentai-bulk-summary-label { color: #666; display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; text-transform: uppercase; }
+    .contentai-bulk-summary-item strong { display: block; font-size: 15px; overflow-wrap: anywhere; }
+    .contentai-bulk-usage { background: #fff; border: 1px solid #d6d6d6; display: grid; gap: 0; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin: -6px 0 20px; }
+    .contentai-bulk-usage-item { border-right: 1px solid #e5e5e5; padding: 12px 14px; }
+    .contentai-bulk-usage-label { color: #666; display: block; font-size: 11px; font-weight: 700; margin-bottom: 5px; text-transform: uppercase; }
+    .contentai-bulk-usage-value { font-weight: 600; overflow-wrap: anywhere; }
+    .contentai-bulk-workspace { background: #fff; border: 1px solid #d6d6d6; display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 520px; }
+    .contentai-bulk-tabs { background: #f8f8f8; border-right: 1px solid #d6d6d6; max-height: 720px; overflow: auto; }
+    .contentai-bulk-tab { background: transparent; border: 0; border-bottom: 1px solid #e5e5e5; color: #303030; cursor: pointer; display: block; padding: 13px 16px; text-align: left; width: 100%; }
+    .contentai-bulk-tab.is-active { background: #fff; border-left: 4px solid #eb5202; padding-left: 12px; }
+    .contentai-bulk-tab strong, .contentai-bulk-tab span { display: block; overflow-wrap: anywhere; }
+    .contentai-bulk-tab span { color: #666; font-size: 12px; margin-top: 4px; }
+    .contentai-bulk-panel { display: none; padding: 18px; }
+    .contentai-bulk-panel.is-active { display: block; }
+    .contentai-bulk-panel-head { align-items: center; display: flex; gap: 12px; justify-content: space-between; margin-bottom: 14px; }
+    .contentai-bulk-panel-head h2 { font-size: 20px; margin: 0; }
+    .contentai-bulk-status { background: #f1f1f1; border: 1px solid #d6d6d6; font-weight: 600; padding: 7px 10px; }
+    .contentai-bulk-field-row { border-top: 1px solid #e5e5e5; display: grid; grid-template-columns: 220px minmax(0, 1fr); }
+    .contentai-bulk-field-name { background: #fafafa; border-right: 1px solid #e5e5e5; font-weight: 600; padding: 15px; }
+    .contentai-bulk-field-value { line-height: 1.45; overflow-wrap: anywhere; padding: 15px 18px; }
+    .contentai-bulk-field-value ul, .contentai-bulk-field-value ol { padding-left: 22px; }
+    .contentai-bulk-field-flex { align-items: flex-start; display: flex; gap: 12px; }
+    .contentai-bulk-field-flex input { margin-top: 4px; }
+    .contentai-bulk-error { background: #fff8f6; border: 1px solid #e22626; color: #6f0000; padding: 14px; }
+    .contentai-bulk-submit { margin-top: 18px; text-align: right; }
+    @media (max-width: 900px) {
+        .contentai-bulk-workspace, .contentai-bulk-field-row { grid-template-columns: 1fr; }
+        .contentai-bulk-tabs { border-right: 0; max-height: 260px; }
+        .contentai-bulk-field-name { border-right: 0; border-bottom: 1px solid #e5e5e5; }
+    }
+</style>
+<div class="contentai-bulk-report">
+    <div class="page-main-actions contentai-bulk-report-actions">
+        <div class="page-actions">
+            <div class="page-actions-buttons">
+                <button type="button" class="action-default" onclick="location.href='<?= $block->escapeUrl($block->getBackUrl()) ?>'">
+                    <span><?= $block->escapeHtml(__('Back')) ?></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <section class="contentai-bulk-summary">
+        <div class="contentai-bulk-summary-item">
+            <span class="contentai-bulk-summary-label"><?= $block->escapeHtml(__('Bulk Report ID')) ?></span>
+            <strong><?= (int) $report->getId() ?></strong>
+        </div>
+        <div class="contentai-bulk-summary-item">
+            <span class="contentai-bulk-summary-label"><?= $block->escapeHtml(__('Products')) ?></span>
+            <strong><?= (int) $block->getProductCount() ?></strong>
+        </div>
+        <div class="contentai-bulk-summary-item">
+            <span class="contentai-bulk-summary-label"><?= $block->escapeHtml(__('Pending')) ?></span>
+            <strong><?= (int) $block->getPendingCount() ?></strong>
+        </div>
+        <div class="contentai-bulk-summary-item">
+            <span class="contentai-bulk-summary-label"><?= $block->escapeHtml(__('Store ID')) ?></span>
+            <strong><?= $block->escapeHtml((string) $report->getData('store_id')) ?></strong>
+        </div>
+        <div class="contentai-bulk-summary-item">
+            <span class="contentai-bulk-summary-label"><?= $block->escapeHtml(__('Created At')) ?></span>
+            <strong><?= $block->escapeHtml((string) $report->getData('created_at')) ?></strong>
+        </div>
+    </section>
+
+    <?php if ($usageRows): ?>
+        <section class="contentai-bulk-usage">
+            <?php foreach ($usageRows as $label => $value): ?>
+                <div class="contentai-bulk-usage-item">
+                    <span class="contentai-bulk-usage-label"><?= $block->escapeHtml(__($label)) ?></span>
+                    <span class="contentai-bulk-usage-value"><?= $block->escapeHtml($value) ?></span>
+                </div>
+            <?php endforeach; ?>
+        </section>
+    <?php endif; ?>
+
+    <form action="<?= $block->escapeUrl($block->getApplyUrl()) ?>" method="post">
+        <?= $block->getBlockHtml('formkey') ?>
+        <div class="contentai-bulk-workspace" data-contentai-bulk-report>
+            <div class="contentai-bulk-tabs">
+                <?php foreach ($products as $index => $product): ?>
+                    <?php
+                    $sku = (string) ($product['sku'] ?? ('Product ' . ($index + 1)));
+                    $status = (string) ($product['approval_status'] ?? 'pending_approval');
+                    ?>
+                    <button type="button" class="contentai-bulk-tab<?= $index === 0 ? ' is-active' : '' ?>" data-tab-index="<?= (int) $index ?>">
+                        <strong><?= $block->escapeHtml($sku) ?></strong>
+                        <span><?= $block->escapeHtml($block->getApprovalStatusLabel($status)) ?></span>
+                    </button>
+                <?php endforeach; ?>
+            </div>
+            <div>
+                <?php foreach ($products as $index => $product): ?>
+                    <?php
+                    $sku = (string) ($product['sku'] ?? ('Product ' . ($index + 1)));
+                    $status = (string) ($product['approval_status'] ?? 'pending_approval');
+                    $fields = $block->getGeneratedFields($product);
+                    ?>
+                    <div class="contentai-bulk-panel<?= $index === 0 ? ' is-active' : '' ?>" data-panel-index="<?= (int) $index ?>">
+                        <div class="contentai-bulk-panel-head">
+                            <h2><?= $block->escapeHtml($sku) ?></h2>
+                            <span class="contentai-bulk-status"><?= $block->escapeHtml($block->getApprovalStatusLabel($status)) ?></span>
+                        </div>
+                        <?php if (!empty($product['error'])): ?>
+                            <div class="contentai-bulk-error"><?= $block->escapeHtml((string) $product['error']) ?></div>
+                        <?php endif; ?>
+                        <?php foreach ($fields as $code => $value): ?>
+                            <div class="contentai-bulk-field-row">
+                                <div class="contentai-bulk-field-name"><?= $block->escapeHtml($block->getFieldLabel($code)) ?></div>
+                                <div class="contentai-bulk-field-value">
+                                    <div class="contentai-bulk-field-flex">
+                                        <?php if ($block->canApplyProduct($product)): ?>
+                                            <input type="checkbox" name="apply_fields[<?= (int) $index ?>][]" value="<?= $block->escapeHtmlAttr($code) ?>" checked/>
+                                        <?php endif; ?>
+                                        <div><?= /* @noEscape */ $value !== '' ? $value : '-' ?></div>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php if ($block->getPendingCount() > 0): ?>
+            <div class="contentai-bulk-submit">
+                <button type="submit" class="action-primary">
+                    <span><?= $block->escapeHtml(__('Apply Selected Fields')) ?></span>
+                </button>
+            </div>
+        <?php endif; ?>
+    </form>
+</div>
+<script>
+    require(['jquery'], function ($) {
+        $('[data-contentai-bulk-report]').on('click', '.contentai-bulk-tab', function () {
+            var index = $(this).data('tab-index');
+            $('.contentai-bulk-tab').removeClass('is-active');
+            $('.contentai-bulk-panel').removeClass('is-active');
+            $(this).addClass('is-active');
+            $('.contentai-bulk-panel[data-panel-index="' + index + '"]').addClass('is-active');
+        });
+    });
+</script>
+<?php endif; ?>

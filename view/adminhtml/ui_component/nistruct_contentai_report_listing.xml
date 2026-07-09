@@ -1,0 +1,97 @@
+<?xml version="1.0"?>
+<listing xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Ui:etc/ui_configuration.xsd">
+    <argument name="data" xsi:type="array">
+        <item name="js_config" xsi:type="array">
+            <item name="provider" xsi:type="string">nistruct_contentai_report_listing.nistruct_contentai_report_listing_data_source</item>
+        </item>
+    </argument>
+    <settings>
+        <spinner>columns</spinner>
+        <deps>
+            <dep>nistruct_contentai_report_listing.nistruct_contentai_report_listing_data_source</dep>
+        </deps>
+    </settings>
+    <dataSource name="nistruct_contentai_report_listing_data_source" component="Magento_Ui/js/grid/provider">
+        <settings>
+            <storageConfig>
+                <param name="indexField" xsi:type="string">entity_id</param>
+            </storageConfig>
+            <updateUrl path="mui/index/render"/>
+        </settings>
+        <aclResource>Nistruct_ContentAI::report</aclResource>
+        <dataProvider class="Nistruct\ContentAI\Ui\DataProvider\Report\DataProvider" name="nistruct_contentai_report_listing_data_source">
+            <settings>
+                <requestFieldName>id</requestFieldName>
+                <primaryFieldName>entity_id</primaryFieldName>
+            </settings>
+        </dataProvider>
+    </dataSource>
+    <listingToolbar name="listing_top">
+        <settings>
+            <sticky>true</sticky>
+        </settings>
+        <bookmark name="bookmarks"/>
+        <columnsControls name="columns_controls"/>
+        <filters name="listing_filters"/>
+        <paging name="listing_paging"/>
+    </listingToolbar>
+    <columns name="columns">
+        <selectionsColumn name="ids">
+            <settings>
+                <indexField>entity_id</indexField>
+            </settings>
+        </selectionsColumn>
+        <column name="entity_id">
+            <settings>
+                <filter>textRange</filter>
+                <sorting>desc</sorting>
+                <label translate="true">ID</label>
+            </settings>
+        </column>
+        <column name="entity_type">
+            <settings>
+                <filter>select</filter>
+                <options class="Nistruct\ContentAI\Model\Config\Source\EntityType"/>
+                <dataType>select</dataType>
+                <label translate="true">Type</label>
+            </settings>
+        </column>
+        <column name="product_sku">
+            <settings>
+                <filter>text</filter>
+                <label translate="true">Product SKU</label>
+            </settings>
+        </column>
+        <column name="generator_type">
+            <settings>
+                <filter>text</filter>
+                <label translate="true">Source</label>
+            </settings>
+        </column>
+        <column name="generated_content" component="Nistruct_ContentAI/js/grid/columns/generated-content">
+            <argument name="data" xsi:type="array">
+                <item name="config" xsi:type="array">
+                    <item name="bodyTmpl" xsi:type="string">Nistruct_ContentAI/grid/cells/generated-content</item>
+                    <item name="contentAiMode" xsi:type="string">single</item>
+                </item>
+            </argument>
+            <settings>
+                <bodyTmpl>Nistruct_ContentAI/grid/cells/generated-content</bodyTmpl>
+                <label translate="true">Generated Content</label>
+            </settings>
+        </column>
+        <column name="created_at" class="Magento\Ui\Component\Listing\Columns\Date" component="Magento_Ui/js/grid/columns/date">
+            <settings>
+                <filter>dateRange</filter>
+                <dataType>date</dataType>
+                <label translate="true">Created At</label>
+            </settings>
+        </column>
+        <actionsColumn name="actions" class="Nistruct\ContentAI\Ui\Component\Listing\Column\ReportActions">
+            <settings>
+                <indexField>entity_id</indexField>
+                <label translate="true">Actions</label>
+            </settings>
+        </actionsColumn>
+    </columns>
+</listing>
