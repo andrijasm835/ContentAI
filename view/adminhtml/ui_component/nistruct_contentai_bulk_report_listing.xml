@@ -45,7 +45,7 @@
             <settings>
                 <filter>textRange</filter>
                 <sorting>desc</sorting>
-                <label translate="true">Bulk Report ID</label>
+                <label translate="true">Batch ID</label>
             </settings>
         </column>
         <column name="ai_data" component="Nistruct_ContentAI/js/grid/columns/generated-content">
@@ -63,20 +63,20 @@
         <column name="approval_status">
             <settings>
                 <filter>text</filter>
-                <label translate="true">Approval Status</label>
+                <label translate="true">Review Status</label>
             </settings>
         </column>
         <column name="store_id">
             <settings>
                 <filter>textRange</filter>
-                <label translate="true">Store ID</label>
+                <label translate="true">Store View ID</label>
             </settings>
         </column>
         <column name="created_at" class="Magento\Ui\Component\Listing\Columns\Date" component="Magento_Ui/js/grid/columns/date">
             <settings>
                 <filter>dateRange</filter>
                 <dataType>date</dataType>
-                <label translate="true">Created At</label>
+                <label translate="true">Created</label>
             </settings>
         </column>
         <actionsColumn name="actions" class="Nistruct\ContentAI\Ui\Component\Listing\Column\BulkReportActions">

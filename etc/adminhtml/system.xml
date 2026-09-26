@@ -9,7 +9,7 @@
             <label>ContentAI</label>
             <tab>nistruct</tab>
             <resource>Nistruct_ContentAI::configuration</resource>
-            <group id="general" translate="label" type="text" sortOrder="10" showInDefault="1">
+            <group id="general" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
                 <label>General</label>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1">
                     <label>Enable</label>
@@ -19,6 +19,23 @@
                     <label>Debug Logging</label>
                     <comment><![CDATA[Log full request/response details. Enable only in development.]]></comment>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="default_content_locale" translate="label comment" type="select" sortOrder="30" showInDefault="1">
+                    <label>Default Content Locale</label>
+                    <comment>Language used when generating content for All Store Views (store ID 0).</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Locale</source_model>
+                </field>
+                <field id="language_instruction" translate="label comment" type="textarea" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Additional Language Instruction</label>
+                    <comment>Optional writing instruction for this scope, for example a preferred script, terminology or tone.</comment>
+                </field>
+                <field id="product_attributes" translate="label comment" type="multiselect" sortOrder="50" showInDefault="1">
+                    <label>Allowed Product Attributes</label><comment>Text attributes ContentAI may generate and update.</comment>
+                    <source_model>Nistruct\ContentAI\Model\Config\Source\ProductAttributes</source_model>
+                </field>
+                <field id="category_attributes" translate="label comment" type="multiselect" sortOrder="60" showInDefault="1">
+                    <label>Allowed Category Attributes</label><comment>Text attributes ContentAI may generate and update.</comment>
+                    <source_model>Nistruct\ContentAI\Model\Config\Source\CategoryAttributes</source_model>
                 </field>
             </group>
             <group id="api" translate="label" type="text" sortOrder="20" showInDefault="1">
@@ -34,32 +51,17 @@
                         <field id="provider">openai</field>
                     </depends>
                 </field>
-                <field id="openai_model" translate="label" type="select" sortOrder="30" showInDefault="1">
-                    <label>OpenAI Model</label>
-                    <source_model>Nistruct\ContentAI\Model\Config\Source\OpenAiModel</source_model>
+                <field id="openai_model" translate="label comment" type="text" sortOrder="30" showInDefault="1">
+                    <label>OpenAI Model ID</label>
+                    <comment>Enter any model ID supported by the OpenAI Responses API.</comment>
+                    <validate>required-entry</validate>
                     <depends>
                         <field id="provider">openai</field>
                     </depends>
                 </field>
                 <field id="openai_max_tokens" translate="label" type="text" sortOrder="40" showInDefault="1">
-                    <label>OpenAI Max Output Tokens</label>
+                    <label>OpenAI Max Response Length</label>
                     <validate>required-entry validate-digits</validate>
-                    <depends>
-                        <field id="provider">openai</field>
-                    </depends>
-                </field>
-                <field id="openai_input_price" translate="label comment" type="text" sortOrder="45" showInDefault="1">
-                    <label>OpenAI Input Price / 1M Tokens</label>
-                    <comment><![CDATA[Optional. Used only for report cost estimates. Enter the current provider price in USD.]]></comment>
-                    <validate>validate-number</validate>
-                    <depends>
-                        <field id="provider">openai</field>
-                    </depends>
-                </field>
-                <field id="openai_output_price" translate="label comment" type="text" sortOrder="46" showInDefault="1">
-                    <label>OpenAI Output Price / 1M Tokens</label>
-                    <comment><![CDATA[Optional. Used only for report cost estimates. Enter the current provider price in USD.]]></comment>
-                    <validate>validate-number</validate>
                     <depends>
                         <field id="provider">openai</field>
                     </depends>
@@ -71,32 +73,17 @@
                         <field id="provider">anthropic</field>
                     </depends>
                 </field>
-                <field id="anthropic_model" translate="label" type="select" sortOrder="60" showInDefault="1">
-                    <label>Anthropic Model</label>
-                    <source_model>Nistruct\ContentAI\Model\Config\Source\AnthropicModel</source_model>
+                <field id="anthropic_model" translate="label comment" type="text" sortOrder="60" showInDefault="1">
+                    <label>Anthropic Model ID</label>
+                    <comment>Enter any active Claude API model ID.</comment>
+                    <validate>required-entry</validate>
                     <depends>
                         <field id="provider">anthropic</field>
                     </depends>
                 </field>
                 <field id="anthropic_max_tokens" translate="label" type="text" sortOrder="70" showInDefault="1">
-                    <label>Anthropic Max Tokens</label>
+                    <label>Anthropic Max Response Length</label>
                     <validate>required-entry validate-digits</validate>
-                    <depends>
-                        <field id="provider">anthropic</field>
-                    </depends>
-                </field>
-                <field id="anthropic_input_price" translate="label comment" type="text" sortOrder="75" showInDefault="1">
-                    <label>Anthropic Input Price / 1M Tokens</label>
-                    <comment><![CDATA[Optional. Used only for report cost estimates. Enter the current provider price in USD.]]></comment>
-                    <validate>validate-number</validate>
-                    <depends>
-                        <field id="provider">anthropic</field>
-                    </depends>
-                </field>
-                <field id="anthropic_output_price" translate="label comment" type="text" sortOrder="76" showInDefault="1">
-                    <label>Anthropic Output Price / 1M Tokens</label>
-                    <comment><![CDATA[Optional. Used only for report cost estimates. Enter the current provider price in USD.]]></comment>
-                    <validate>validate-number</validate>
                     <depends>
                         <field id="provider">anthropic</field>
                     </depends>

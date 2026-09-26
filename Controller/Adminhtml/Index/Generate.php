@@ -4,18 +4,22 @@ namespace Nistruct\ContentAI\Controller\Adminhtml\Index;
 use Magento\Backend\App\Action;
 use Magento\Catalog\Api\CategoryRepositoryInterface;
 use Magento\Catalog\Api\ProductRepositoryInterface;
-use Magento\Catalog\Model\ResourceModel\Product\Action as ProductAction;
+use Magento\Catalog\Model\ResourceModel\Category as CategoryResource;
 use Magento\Framework\App\Action\HttpPostActionInterface;
 use Magento\Framework\App\CacheInterface;
 use Magento\Framework\App\Filesystem\DirectoryList;
-use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\Controller\Result\JsonFactory;
-use Magento\Eav\Model\Config as EavConfig;
 use Magento\Framework\UrlInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Nistruct\ContentAI\Helper\Data as HelperData;
 use Nistruct\ContentAI\Model\Query\Completions;
 use Nistruct\ContentAI\Model\ReportFactory;
+use Nistruct\ContentAI\Model\Apply\ProductAttributeApplyService;
+use Nistruct\ContentAI\Model\Field\ProductFieldProvider;
+use Nistruct\ContentAI\Model\Field\ProductFieldRequestValidator;
+use Nistruct\ContentAI\Model\Field\CategoryFieldProvider;
+use Nistruct\ContentAI\Model\Scope\GenerationContextResolver;
+use Nistruct\ContentAI\Model\Prompt\EntityPromptBuilder;
 use Psr\Log\LoggerInterface;
 
 class Generate extends Action implements HttpPostActionInterface
@@ -30,11 +34,15 @@ class Generate extends Action implements HttpPostActionInterface
     private $reportFactory;
     private $storeManager;
     private $directoryList;
-    private $productAction;
     private $categoryRepository;
-    private $resourceConnection;
-    private $eavConfig;
+    private $categoryResource;
     private $cache;
+    private ProductAttributeApplyService $productApplyService;
+    private ProductFieldProvider $productFieldProvider;
+    private ProductFieldRequestValidator $productFieldRequestValidator;
+    private GenerationContextResolver $contextResolver;
+    private CategoryFieldProvider $categoryFieldProvider;
+    private EntityPromptBuilder $promptBuilder;
 
     public function __construct(
         Action\Context $context,
@@ -46,11 +54,15 @@ class Generate extends Action implements HttpPostActionInterface
         ReportFactory $reportFactory,
         StoreManagerInterface $storeManager,
         DirectoryList $directoryList,
-        ProductAction $productAction,
         CategoryRepositoryInterface $categoryRepository,
-        ResourceConnection $resourceConnection,
-        EavConfig $eavConfig,
-        CacheInterface $cache
+        CategoryResource $categoryResource,
+        CacheInterface $cache,
+        ProductAttributeApplyService $productApplyService,
+        ProductFieldProvider $productFieldProvider,
+        ProductFieldRequestValidator $productFieldRequestValidator,
+        GenerationContextResolver $contextResolver,
+        CategoryFieldProvider $categoryFieldProvider,
+        EntityPromptBuilder $promptBuilder
     ) {
         parent::__construct($context);
         $this->resultJson = $resultJson;
@@ -61,11 +73,15 @@ class Generate extends Action implements HttpPostActionInterface
         $this->reportFactory = $reportFactory;
         $this->storeManager = $storeManager;
         $this->directoryList = $directoryList;
-        $this->productAction = $productAction;
         $this->categoryRepository = $categoryRepository;
-        $this->resourceConnection = $resourceConnection;
-        $this->eavConfig = $eavConfig;
+        $this->categoryResource = $categoryResource;
         $this->cache = $cache;
+        $this->productApplyService = $productApplyService;
+        $this->productFieldProvider = $productFieldProvider;
+        $this->productFieldRequestValidator = $productFieldRequestValidator;
+        $this->contextResolver = $contextResolver;
+        $this->categoryFieldProvider = $categoryFieldProvider;
+        $this->promptBuilder = $promptBuilder;
     }
 
     public function execute()
@@ -100,22 +116,31 @@ class Generate extends Action implements HttpPostActionInterface
         }
 
         $selectedFields = $this->decodeJsonParam('selected_fields');
+        $this->productFieldRequestValidator->validateSelections($selectedFields);
         $productData = $this->decodeJsonParam('product_data');
         $sku = trim((string) $this->getRequest()->getParam('sku', ''));
         $storeId = $this->getRequestStoreId();
-        $language = $this->helper->getLanguageByStoreId($storeId);
+        $context = $this->contextResolver->resolve($storeId);
+        $language = $context->getLanguage();
         $productData = $this->enrichProductData($productData, $sku);
 
-        if (empty($selectedFields)) {
-            return ['error' => true, 'data' => (string) __('No fields selected.')];
+        if ($sku !== '') {
+            $product = $this->productRepository->get($sku, false, $storeId, true);
+            $selectedFields = array_values(array_filter($selectedFields, function (array $field) use ($product, $storeId): bool {
+                $metadata=$this->productFieldProvider->getField((string)($field['code'] ?? ''));
+                return $metadata && !($storeId > 0 && $metadata['scope'] === 'global')
+                    && $this->productFieldProvider->isFieldInAttributeSet((string)$field['code'], (int)$product->getAttributeSetId());
+            }));
         }
 
-        $prompt = $this->buildFieldsPrompt($selectedFields, $productData, $language, 'product');
+        if (empty($selectedFields)) {
+            return ['error' => true, 'data' => (string) __('No selected fields are allowed for this product, attribute set and store scope.')];
+        }
+
+        $prompt = $this->promptBuilder->build('product', $this->decorateProductFields($selectedFields), $productData, $context);
         $imagePayload = $this->getContextImageUrl($productData);
         $this->queryCompletion->resetUsageMetadata();
         $fields = $this->decodeFieldsResponse($this->queryCompletion->generateContent($prompt, $imagePayload));
-        $fields = $this->retryWrongLanguageResponse($fields, $prompt, $language, $imagePayload);
-        $usageMetadata = $this->queryCompletion->getUsageMetadata();
 
         $allowedCodes = [];
         foreach ($selectedFields as $field) {
@@ -126,7 +151,10 @@ class Generate extends Action implements HttpPostActionInterface
 
         $filtered = [];
         foreach ($fields as $code => $value) {
-            $code = $this->normalizeReturnedFieldCode((string) $code);
+            $code = (string) $code;
+            if (!isset($allowedCodes[$code])) {
+                $code = $this->normalizeReturnedFieldCode($code);
+            }
             if (!isset($allowedCodes[$code]) || !is_scalar($value)) {
                 continue;
             }
@@ -144,9 +172,9 @@ class Generate extends Action implements HttpPostActionInterface
             $report->setProductSku($sku !== '' ? $sku : null);
             $report->setStoreId($storeId);
             $report->setData('generated_content', json_encode($filtered, JSON_UNESCAPED_UNICODE));
-            $report->setData('usage_metadata', json_encode($usageMetadata));
             $report->setCreatedAt(date('Y-m-d H:i:s'));
             $report->setGeneratorType('single');
+            $report->setData('usage_metadata', json_encode(['api' => $this->queryCompletion->getUsageMetadata(), 'context' => $context->toArray()], JSON_UNESCAPED_UNICODE));
             $report->save();
         } catch (\Exception $e) {
             $this->logger->error('ContentAI report save error: ' . $e->getMessage());
@@ -169,14 +197,10 @@ class Generate extends Action implements HttpPostActionInterface
             return ['error' => true, 'data' => (string) __('No fields selected for apply.')];
         }
 
-        $product = $this->productRepository->get($sku, false, $storeId, true);
         $saved = [];
         foreach ($fields as $code => $value) {
-            $targetCode = $this->getTargetProductFieldCode($this->normalizeReturnedFieldCode((string) $code));
-            if (!$this->isAllowedProductField($targetCode) || !is_scalar($value)) {
-                continue;
-            }
-            if (!$product->getResource()->getAttribute($targetCode)) {
+            $targetCode = (string)$code;
+            if (!$this->productFieldProvider->getField($targetCode) || !is_scalar($value)) {
                 continue;
             }
             $saved[$targetCode] = $this->helper->sanitizeHtml((string) $value);
@@ -186,7 +210,8 @@ class Generate extends Action implements HttpPostActionInterface
             return ['error' => true, 'data' => (string) __('No valid product fields selected for apply.')];
         }
 
-        $this->productAction->updateAttributes([(int) $product->getId()], $saved, $storeId);
+        $result = $this->productApplyService->apply($sku, $saved, $storeId);
+        $saved = $result['saved'];
         $this->logger->info(sprintf('ContentAI applied fields for SKU %s store %d: %s', $sku, $storeId, implode(',', array_keys($saved))));
 
         return ['error' => false, 'data' => ['fields' => $saved]];
@@ -198,7 +223,8 @@ class Generate extends Action implements HttpPostActionInterface
         $categoryData = $this->decodeJsonParam('category_data');
         $categoryId = (int) $this->getRequest()->getParam('category_id', 0);
         $storeId = $this->getRequestStoreId();
-        $language = $this->helper->getLanguageByStoreId($storeId);
+        $context = $this->contextResolver->resolve($storeId);
+        $language = $context->getLanguage();
 
         if ($categoryId <= 0) {
             return ['error' => true, 'data' => (string) __('Category ID is missing.')];
@@ -207,14 +233,18 @@ class Generate extends Action implements HttpPostActionInterface
             return ['error' => true, 'data' => (string) __('No fields selected.')];
         }
 
+        $selectedFields=array_values(array_filter($selectedFields, function(array $field) use ($storeId): bool {
+            $metadata=$this->categoryFieldProvider->getField((string)($field['code'] ?? ''));
+            return $metadata && !($storeId > 0 && ($metadata['scope'] ?? 'store') === 'global');
+        }));
+        if (!$selectedFields) { return ['error'=>true,'data'=>(string)__('No selected category fields are allowed for this store scope.')]; }
+
         $category = $this->categoryRepository->get($categoryId, $storeId);
         $categoryData = $this->enrichCategoryData($categoryData, $category);
-        $prompt = $this->buildFieldsPrompt($selectedFields, $categoryData, $language, 'category');
+        $prompt = $this->promptBuilder->build('category', $selectedFields, $categoryData, $context);
 
         $this->queryCompletion->resetUsageMetadata();
         $fields = $this->decodeFieldsResponse($this->queryCompletion->generateContent($prompt));
-        $fields = $this->retryWrongLanguageResponse($fields, $prompt, $language, '');
-        $usageMetadata = $this->queryCompletion->getUsageMetadata();
 
         $allowedCodes = [];
         foreach ($selectedFields as $field) {
@@ -225,7 +255,7 @@ class Generate extends Action implements HttpPostActionInterface
 
         $filtered = [];
         foreach ($fields as $code => $value) {
-            $code = $this->normalizeReturnedFieldCode((string) $code, 'category');
+            $code = (string)$code;
             if (!isset($allowedCodes[$code]) || !is_scalar($value)) {
                 continue;
             }
@@ -243,9 +273,9 @@ class Generate extends Action implements HttpPostActionInterface
             $report->setData('category_name', (string) $category->getName());
             $report->setStoreId($storeId);
             $report->setData('generated_content', json_encode($filtered, JSON_UNESCAPED_UNICODE));
-            $report->setData('usage_metadata', json_encode($usageMetadata));
             $report->setCreatedAt(date('Y-m-d H:i:s'));
             $report->setGeneratorType('single');
+            $report->setData('usage_metadata', json_encode(['api' => $this->queryCompletion->getUsageMetadata(), 'context' => $context->toArray()], JSON_UNESCAPED_UNICODE));
             $report->save();
         } catch (\Exception $e) {
             $this->logger->error('ContentAI category report save error: ' . $e->getMessage());
@@ -267,7 +297,8 @@ class Generate extends Action implements HttpPostActionInterface
         $saved = [];
         foreach ($fields as $code => $value) {
             $code = $this->normalizeReturnedFieldCode((string) $code, 'category');
-            if (!$this->isAllowedCategoryField($code) || !is_scalar($value)) {
+            $field = $this->categoryFieldProvider->getField($code);
+            if (!$field || ($storeId > 0 && ($field['scope'] ?? 'store') === 'global') || !is_scalar($value)) {
                 continue;
             }
 
@@ -287,82 +318,25 @@ class Generate extends Action implements HttpPostActionInterface
 
     private function saveCategoryAttributeValues(int $categoryId, int $storeId, array $values): void
     {
-        $connection = $this->resourceConnection->getConnection();
-
+        $category = $this->categoryRepository->get($categoryId, $storeId);
+        $category->setStoreId($storeId);
         foreach ($values as $code => $value) {
-            $attribute = $this->eavConfig->getAttribute('catalog_category', $code);
-            if (!$attribute || !(int) $attribute->getAttributeId()) {
+            if (!$this->categoryResource->getAttribute($code)) {
                 continue;
             }
-
-            $backendType = (string) $attribute->getBackendType();
-            if ($backendType === '' || $backendType === 'static') {
-                continue;
-            }
-
-            $table = $this->resourceConnection->getTableName('catalog_category_entity_' . $backendType);
-            $connection->insertOnDuplicate(
-                $table,
-                [
-                    'attribute_id' => (int) $attribute->getAttributeId(),
-                    'store_id' => $storeId,
-                    'entity_id' => $categoryId,
-                    'value' => (string) $value,
-                ],
-                ['value']
-            );
+            $category->setData($code, $value);
+            $this->categoryResource->saveAttribute($category, $code);
         }
     }
 
-    private function buildFieldsPrompt(array $selectedFields, array $productData, string $language, string $entityLabel = 'product'): string
+    private function decorateProductFields(array $fields): array
     {
-        $entityLabel = strtolower($entityLabel) === 'category' ? 'category' : 'product';
-        $lines = [
-            'Generate improved Magento ' . $entityLabel . ' field values for the selected output fields.',
-            'The target language is determined only by the Magento store view/scope, not by the language of existing product data.',
-            'Target language: ' . $language . '.',
-            'All generated field values must be written strictly in the target language.',
-            'Use current ' . $entityLabel . ' data only as factual source material. Do not use it as the language, tone, or final wording authority.',
-            'If current ' . $entityLabel . ' data is in a different language, extract the facts and write fresh improved content in the target language. Do not produce a literal translation and do not return the same text unchanged.',
-            'Keep only brand names, SKU values, model names, product codes, and established product names unchanged.',
-            'When the target language is English, return English wording only; do not return Serbian, Croatian, or Bosnian words unless they are part of a brand/product/model name.',
-            'For Serbian use Serbian Latin wording, not Croatian or Bosnian wording.',
-            'For Croatian/Bosnian use Croatian/Bosnian Latin wording.',
-            'Return only a valid JSON object. Do not include markdown, comments, explanations, or code fences.',
-            'The JSON object keys must be exactly the selected output field codes.',
-            'Do not return fields that were not selected as output fields.',
-            'Do not invent specifications, certifications, dimensions, prices, stock, or claims that are not present in the product data.',
-            'Use clean HTML only for rich text description-like fields. Use plain text for titles, names, meta fields, URL keys, and short scalar fields.',
-            'For meta_title keep it concise. For meta_description keep it suitable for search snippets.',
-            'For meta_keyword or meta_keywords return comma-separated keywords in the target language, except brand names, SKU values, and established product names.',
-            'For image label fields return concise plain text describing the product image for accessibility and image context.',
-            'If an image is provided as part of the message, use it as visual context for product appearance, shape, style, color, and visible product features.',
-            '',
-            'Selected fields:'
-        ];
-        foreach ($selectedFields as $field) {
-            $code = (string) ($field['code'] ?? '');
-            if ($code === '') {
-                continue;
-            }
-            $lines[] = sprintf('- %s (%s), current value: %s', (string) ($field['label'] ?? $code), $code, $this->normalizePromptValue((string) ($field['value'] ?? '')));
+        foreach ($fields as &$field) {
+            $metadata = $this->productFieldProvider->getField((string)($field['code'] ?? ''));
+            $field['allows_html'] = !empty($metadata['allows_html']);
         }
-        $lines[] = '';
-        $lines[] = 'Current ' . $entityLabel . ' data:';
-        foreach ($productData as $code => $field) {
-            if (!is_array($field) || strpos((string) $code, '_') === 0) {
-                continue;
-            }
-            $label = (string) ($field['label'] ?? $code);
-            $value = (string) ($field['value'] ?? '');
-            if (!$this->shouldIncludePromptField((string) $code, $label, $value)) {
-                continue;
-            }
-            $lines[] = sprintf('- %s (%s): %s', $label, (string) $code, $this->normalizePromptValue($value));
-        }
-        $lines[] = '';
-        $lines[] = 'Return format example: {"name":"New product name","meta_title":"New meta title"}';
-        return implode("\n", $lines);
+        unset($field);
+        return $fields;
     }
 
     private function enrichProductData(array $productData, string $sku): array
@@ -424,30 +398,6 @@ class Generate extends Action implements HttpPostActionInterface
         return $value;
     }
 
-    private function retryWrongLanguageResponse(array $fields, string $prompt, string $language, string $imagePayload): array
-    {
-        if (stripos($language, 'english') === false || !$this->looksLikeSerbianCroatianBosnian($fields)) {
-            return $fields;
-        }
-        $this->logger->warning('ContentAI detected non-English generated response for English target language. Retrying once.');
-        $retryPrompt = $prompt . "\n\nThe previous generated JSON used the wrong language. Regenerate the same selected fields in English only. Do not copy Serbian, Croatian, or Bosnian wording from current product data.";
-        try {
-            return $this->decodeFieldsResponse($this->queryCompletion->generateContent($retryPrompt, $imagePayload));
-        } catch (\Exception $e) {
-            $this->logger->error('ContentAI language retry failed: ' . $e->getMessage());
-            return $fields;
-        }
-    }
-
-    private function looksLikeSerbianCroatianBosnian(array $fields): bool
-    {
-        $text = mb_strtolower(implode(' ', array_map('strval', $fields)));
-        if (preg_match('/[čćšđž]/iu', $text)) {
-            return true;
-        }
-        return (bool) preg_match('/\b(sustav|proizvod|proizvoda|kutij|niskoklizn|folij|podlog|pričvrš|ucvr|učvr|ovjes|pakiranj|iskustvo otvaranja)\b/iu', $text);
-    }
-
     private function decodeFieldsResponse(string $rawData): array
     {
         $rawData = trim($rawData);
@@ -472,23 +422,8 @@ class Generate extends Action implements HttpPostActionInterface
             return ['meta_keyword' => 'meta_keywords', 'keywords' => 'meta_keywords'][$code] ?? $code;
         }
 
-        $aliases = ['meta_keywords' => 'meta_keyword', 'keywords' => 'meta_keyword', 'feature' => 'features', 'technical_features' => 'features', 'product_subtitle' => 'subtitle', 'tech_specs_features' => 'features'];
+        $aliases = ['meta_keywords' => 'meta_keyword', 'keywords' => 'meta_keyword'];
         return $aliases[$code] ?? $code;
-    }
-
-    private function getTargetProductFieldCode(string $code): string
-    {
-        return ['subtitle' => 'product_subtitle', 'features' => 'tech_specs_features'][$code] ?? $code;
-    }
-
-    private function isAllowedProductField(string $code): bool
-    {
-        return in_array($code, ['product_subtitle', 'tech_specs_features', 'short_description', 'description', 'meta_title', 'meta_keyword', 'meta_description', 'image_label', 'small_image_label', 'thumbnail_label'], true);
-    }
-
-    private function isAllowedCategoryField(string $code): bool
-    {
-        return in_array($code, ['description', 'meta_title', 'meta_keywords', 'meta_description'], true);
     }
 
     private function getEntityType(): string
@@ -543,27 +478,6 @@ class Generate extends Action implements HttpPostActionInterface
             return 'data:' . ($mime ?: 'image/jpeg') . ';base64,' . base64_encode((string) file_get_contents($path));
         }
         return $this->storeManager->getStore($this->getRequestStoreId())->getBaseUrl(UrlInterface::URL_TYPE_MEDIA) . 'catalog/product/' . $relativePath;
-    }
-
-    private function normalizePromptValue(string $value): string
-    {
-        $value = trim(strip_tags($value));
-        $value = preg_replace('/\s+/', ' ', $value);
-        return strlen($value) > 1000 ? substr($value, 0, 1000) . '...' : $value;
-    }
-
-    private function shouldIncludePromptField(string $code, string $label, string $value): bool
-    {
-        if (!$this->hasUsefulPromptValue($value)) {
-            return false;
-        }
-        if (in_array($code, ['entity_id', 'attribute_set_id', 'store_id', 'has_options', 'required_options', 'created_at', 'updated_at', 'tier_price_changed', 'is_salable', 'image', 'small_image', 'thumbnail', 'swatch_image', 'image_url', 'media_gallery', 'options_container', 'contentai_status', 'contentai_last_generated_at'], true)) {
-            return false;
-        }
-        if (strpos($code, 'contentai_') === 0) {
-            return false;
-        }
-        return true;
     }
 
     private function hasUsefulPromptValue(string $value): bool

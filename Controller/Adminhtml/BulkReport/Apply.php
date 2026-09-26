@@ -2,8 +2,8 @@
 namespace Nistruct\ContentAI\Controller\Adminhtml\BulkReport;
 
 use Magento\Backend\App\Action;
-use Magento\Catalog\Api\ProductRepositoryInterface;
-use Magento\Catalog\Model\ResourceModel\Product\Action as ProductAction;
+use Nistruct\ContentAI\Model\Apply\ProductAttributeApplyService;
+use Nistruct\ContentAI\Model\Field\ProductFieldProvider;
 use Nistruct\ContentAI\Helper\Data as HelperData;
 use Nistruct\ContentAI\Model\BulkReportFactory;
 use Nistruct\ContentAI\Model\ReportStatus;
@@ -13,37 +13,29 @@ class Apply extends Action
 {
     public const ADMIN_RESOURCE = 'Nistruct_ContentAI::bulk_report';
 
-    private const FIELD_TARGETS = [
+    private const LEGACY_FIELD_TARGETS = [
         'subtitle' => 'product_subtitle',
         'features' => 'tech_specs_features',
-        'short_description' => 'short_description',
-        'description' => 'description',
-        'meta_title' => 'meta_title',
-        'meta_keyword' => 'meta_keyword',
-        'meta_description' => 'meta_description',
-        'image_label' => 'image_label',
-        'small_image_label' => 'small_image_label',
-        'thumbnail_label' => 'thumbnail_label',
     ];
 
     private $reportFactory;
-    private $productRepository;
-    private $productAction;
+    private ProductAttributeApplyService $applyService;
+    private ProductFieldProvider $fieldProvider;
     private $helper;
     private $logger;
 
     public function __construct(
         Action\Context $context,
         BulkReportFactory $reportFactory,
-        ProductRepositoryInterface $productRepository,
-        ProductAction $productAction,
+        ProductAttributeApplyService $applyService,
+        ProductFieldProvider $fieldProvider,
         HelperData $helper,
         LoggerInterface $logger
     ) {
         parent::__construct($context);
         $this->reportFactory = $reportFactory;
-        $this->productRepository = $productRepository;
-        $this->productAction = $productAction;
+        $this->applyService = $applyService;
+        $this->fieldProvider = $fieldProvider;
         $this->helper = $helper;
         $this->logger = $logger;
     }
@@ -82,11 +74,11 @@ class Apply extends Action
             }
 
             try {
-                $product = $this->productRepository->get($sku, false, $storeId, true);
-                $this->productAction->updateAttributes([(int) $product->getId()], $save, $storeId);
-                $productData['applied_fields'] = array_keys($save);
+                $result = $this->applyService->apply($sku, $save, $storeId);
+                $productData['applied_fields'] = array_keys($result['saved']);
+                $productData['skipped_fields'] = $result['skipped'];
                 $productData['approval_status'] = ReportStatus::APPLIED;
-                $applied[$sku] = array_keys($save);
+                $applied[$sku] = array_keys($result['saved']);
             } catch (\Exception $e) {
                 $this->logger->error('ContentAI bulk apply failed for ' . $sku . ': ' . $e->getMessage());
             }
@@ -107,10 +99,14 @@ class Apply extends Action
         $save = [];
         foreach ($codes as $code) {
             $code = (string) $code;
-            $target = self::FIELD_TARGETS[$code] ?? $code;
-            if (isset($fields[$code]) && is_scalar($fields[$code])) {
-                $save[$target] = $this->helper->sanitizeHtml((string) $fields[$code]);
+            if (!isset($fields[$code]) || !is_scalar($fields[$code])) {
+                continue;
             }
+            $target = self::LEGACY_FIELD_TARGETS[$code] ?? $code;
+            if (!$this->fieldProvider->getField($target)) {
+                continue;
+            }
+            $save[$target] = $this->helper->sanitizeHtml((string) $fields[$code]);
         }
         return $save;
     }

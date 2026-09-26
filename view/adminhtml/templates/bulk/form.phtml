@@ -1,7 +1,218 @@
-<?php /** @var \Nistruct\ContentAI\Block\Adminhtml\Bulk\Form $block */ ?> <style> .contentai-bulk-page { max-width: 1280px; } .contentai-bulk-form { background: #fff; border: 1px solid #d6d6d6; } .contentai-bulk-header { border-bottom: 1px solid #e5e5e5; padding: 18px 22px; } .contentai-bulk-header h2 { font-size: 20px; margin: 0 0 6px; } .contentai-bulk-header p { color: #666; margin: 0; } .contentai-bulk-grid { display: grid; gap: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .contentai-bulk-section { padding: 22px; } .contentai-bulk-section + .contentai-bulk-section { border-left: 1px solid #e5e5e5; } .contentai-bulk-section h2 { font-size: 18px; margin: 0 0 18px; } .contentai-bulk-field { margin-bottom: 18px; } .contentai-bulk-field label { display: block; font-weight: 600; margin-bottom: 7px; } .contentai-bulk-field input[type="text"], .contentai-bulk-field input[type="number"], .contentai-bulk-field select, .contentai-bulk-field textarea { max-width: 100%; width: 100%; } .contentai-bulk-field textarea { min-height: 132px; resize: vertical; } .contentai-bulk-category-select { font-family: monospace; min-height: 230px; } .contentai-bulk-checks { display: grid; gap: 8px 18px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); } .contentai-bulk-checks label { font-weight: 400; margin: 0; } .contentai-bulk-checks input { margin-right: 6px; } .contentai-bulk-note { color: #666; font-size: 12px; line-height: 1.4; margin: 6px 0 0; } .contentai-bulk-actions { border-top: 1px solid #e5e5e5; padding: 18px 22px; text-align: right; } .contentai-bulk-actions .contentai-bulk-running { color: #666; display: none; margin-right: 14px; } .contentai-bulk-form.is-submitting .contentai-bulk-running { display: inline-block; } @media (max-width: 900px) { .contentai-bulk-grid { grid-template-columns: 1fr; } .contentai-bulk-section + .contentai-bulk-section { border-left: 0; border-top: 1px solid #e5e5e5; } }</style><div class="contentai-bulk-page"><form class="contentai-bulk-form" action="<?= $block->escapeUrl($block->getPostUrl()) ?>" method="post" data-contentai-bulk-form><?= $block->getBlockHtml('formkey') ?> <div class="contentai-bulk-header"><h2><?= $block->escapeHtml(__('Bulk Content Generator')) ?></h2><p><?= $block->escapeHtml(__('Select a controlled product batch, choose fields, then review generated results in Bulk Reports before applying anything to products.')) ?></p></div><div class="contentai-bulk-grid"><section class="contentai-bulk-section"><h2><?= $block->escapeHtml(__('Products')) ?></h2><div class="contentai-bulk-field"><label for="contentai_store_id"><?= $block->escapeHtml(__('Store View')) ?></label> <select id="contentai_store_id" name="store_id"><?php foreach ($block->getStoreOptions() as $option): ?> <option value="<?= $block->escapeHtmlAttr((string) $option['value']) ?>"><?= $block->escapeHtml((string) $option['label']) ?></option><?php endforeach; ?></select></div><div class="contentai-bulk-field"><label for="contentai_category_id"><?= $block->escapeHtml(__('Category')) ?></label> <select class="contentai-bulk-category-select" id="contentai_category_id" name="category_id" size="10"><?php foreach ($block->getCategoryOptions() as $option): ?> <option value="<?= $block->escapeHtmlAttr((string) $option['value']) ?>"><?= $block->escapeHtml((string) $option['label']) ?></option><?php endforeach; ?></select> <p class="contentai-bulk-note"><?= $block->escapeHtml(__('Only enabled categories with products in their branch are shown. Product count is displayed in brackets.')) ?></p></div><div class="contentai-bulk-field"><label for="contentai_skus"><?= $block->escapeHtml(__('Specific SKUs')) ?></label> <textarea id="contentai_skus" name="skus" rows="6" placeholder="SKU-1, SKU-2&#10;SKU-3"></textarea> <p class="contentai-bulk-note"><?= $block->escapeHtml(__('Optional. Separate SKUs by comma, space, or new line.')) ?></p></div><div class="contentai-bulk-field"><label for="contentai_limit"><?= $block->escapeHtml(__('Maximum Products')) ?></label> <input id="contentai_limit" name="limit" type="number" min="1" max="50" value="10"/><p class="contentai-bulk-note"><?= $block->escapeHtml(__('Keep batches small enough for review and API cost control.')) ?></p></div></section><section class="contentai-bulk-section"><h2><?= $block->escapeHtml(__('Generation')) ?></h2><div class="contentai-bulk-field"><label><?= $block->escapeHtml(__('Generate Fields')) ?></label> <div class="contentai-bulk-checks"><?php foreach ($block->getFieldOptions() as $code => $label): ?> <label> <input type="checkbox" name="fields[]" value="<?= $block->escapeHtmlAttr($code) ?>" checked/><?= $block->escapeHtml(__($label)) ?></label> <?php endforeach; ?></div></div><div class="contentai-bulk-field"><label><?= $block->escapeHtml(__('Only Products Missing')) ?></label> <div class="contentai-bulk-checks"><?php foreach ($block->getFieldOptions() as $code => $label): ?> <label> <input type="checkbox" name="missing_fields[]" value="<?= $block->escapeHtmlAttr($code) ?>"/><?= $block->escapeHtml(__($label)) ?></label> <?php endforeach; ?></div><p class="contentai-bulk-note"><?= $block->escapeHtml(__('Leave empty to include products even when fields already have values.')) ?></p></div></section></div><div class="contentai-bulk-actions"><span class="contentai-bulk-running"><?= $block->escapeHtml(__('Generation started. Keep this tab open until Bulk Reports loads.')) ?></span> <button type="submit" class="action-primary"><span><?= $block->escapeHtml(__('Start Bulk Generation')) ?></span></button></div></form></div><script>
-    require(['jquery'], function ($) {
-        $('[data-contentai-bulk-form]').on('submit', function () {
-            $(this).addClass('is-submitting');
-            $(this).find('button[type="submit"]').prop('disabled', true);
+<?php /** @var \Nistruct\ContentAI\Block\Adminhtml\Bulk\Form $block */ ?>
+<div class="contentai-bulk-page">
+    <form class="contentai-bulk-form" action="<?= $block->escapeUrl($block->getPostUrl()) ?>" method="post" data-contentai-bulk-form>
+        <?= $block->getBlockHtml('formkey') ?>
+        <div class="contentai-bulk-header">
+            <h2><?= $block->escapeHtml(__('Generate Product Content')) ?></h2>
+            <p><?= $block->escapeHtml(__('Build the generation scope one step at a time. You will review all suggestions before applying them.')) ?></p>
+        </div>
+        <div class="contentai-bulk-steps">
+            <section class="contentai-bulk-step" data-step="websites">
+                <div class="contentai-bulk-step-number">1</div>
+                <div class="contentai-bulk-step-body">
+                    <h3><?= $block->escapeHtml(__('Choose Websites')) ?></h3>
+                    <p class="contentai-bulk-note"><?= $block->escapeHtml(__('Select one or more websites where content should be generated.')) ?></p>
+                    <div class="contentai-bulk-options">
+                        <?php foreach ($block->getWebsiteOptions() as $option): ?>
+                            <label class="contentai-bulk-option">
+                                <input type="checkbox"
+                                       name="website_ids[]"
+                                       value="<?= $block->escapeHtmlAttr((string)$option['value']) ?>"
+                                       data-default-store-id="<?= (int)$option['default_store_id'] ?>"
+                                       data-website-choice>
+                                <span><?= $block->escapeHtml((string)$option['label']) ?></span>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </section>
+            <section class="contentai-bulk-step" data-step="stores" hidden>
+                <div class="contentai-bulk-step-number">2</div>
+                <div class="contentai-bulk-step-body">
+                    <h3><?= $block->escapeHtml(__('Choose Store Views')) ?></h3>
+                    <p class="contentai-bulk-note"><?= $block->escapeHtml(__('Each selected store view gets its own language-specific report.')) ?></p>
+                    <div class="contentai-bulk-options">
+                        <?php foreach ($block->getStoreOptions() as $option): ?>
+                            <label class="contentai-bulk-option"
+                                   data-store-option
+                                   data-website-id="<?= $block->escapeHtmlAttr((string)$option['website_id']) ?>"
+                                   data-global-store="<?= !empty($option['is_global']) ? '1' : '0' ?>"
+                                   hidden>
+                                <input type="checkbox" name="store_ids[]" value="<?= $block->escapeHtmlAttr((string)$option['value']) ?>" data-store-choice>
+                                <span><?= $block->escapeHtml((string)$option['label']) ?></span>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </section>
+            <section class="contentai-bulk-step" data-step="source" hidden>
+                <div class="contentai-bulk-step-number">3</div>
+                <div class="contentai-bulk-step-body">
+                    <h3><?= $block->escapeHtml(__('Choose Products')) ?></h3>
+                    <div class="contentai-bulk-segmented" role="radiogroup">
+                        <label><input type="radio" name="product_source" value="category" data-source-choice><span><?= $block->escapeHtml(__('Category')) ?></span></label>
+                        <label><input type="radio" name="product_source" value="skus" data-source-choice><span><?= $block->escapeHtml(__('Specific SKUs')) ?></span></label>
+                    </div>
+                    <div class="contentai-bulk-field" data-source-panel="category" hidden>
+                        <label for="contentai_category_search"><?= $block->escapeHtml(__('Category')) ?></label>
+                        <input id="contentai_category_id" name="category_id" type="hidden" value="">
+                        <div class="contentai-category-picker" data-category-picker>
+                            <div class="contentai-category-search">
+                                <input id="contentai_category_search"
+                                       type="search"
+                                       placeholder="<?= $block->escapeHtmlAttr(__('Search categories by name or path')) ?>"
+                                       autocomplete="off"
+                                       data-category-search>
+                            </div>
+                            <div class="contentai-category-list" data-category-list>
+                            <?php foreach ($block->getCategoryOptionGroups() as $storeId => $options): ?>
+                            <?php foreach ($options as $option): ?>
+                                <label class="contentai-category-item"
+                                       style="--category-depth: <?= (int)$option['depth'] ?>"
+                                       data-category-item
+                                       data-category-store-id="<?= (int)$storeId ?>"
+                                       data-category-search-text="<?= $block->escapeHtmlAttr(mb_strtolower((string)$option['path_label'])) ?>">
+                                    <input type="radio"
+                                           name="category_choice"
+                                           value="<?= $block->escapeHtmlAttr((string)$option['value']) ?>"
+                                           data-category-choice>
+                                    <span class="contentai-category-copy">
+                                        <strong><?= $block->escapeHtml((string)$option['label']) ?></strong>
+                                        <small><?= $block->escapeHtml((string)$option['path_label']) ?></small>
+                                    </span>
+                                    <span class="contentai-category-count"><?= (int)$option['product_count'] ?></span>
+                                </label>
+                            <?php endforeach; ?>
+                            <?php endforeach; ?>
+                            </div>
+                            <div class="contentai-category-empty" data-category-empty hidden>
+                                <?= $block->escapeHtml(__('No categories match your search.')) ?>
+                            </div>
+                        </div>
+                        <p class="contentai-bulk-note"><?= $block->escapeHtml(__('All products in the selected category and its subcategories will be included.')) ?></p>
+                    </div>
+                    <div class="contentai-bulk-field" data-source-panel="skus" hidden>
+                        <label for="contentai_skus"><?= $block->escapeHtml(__('Specific SKUs')) ?></label>
+                        <textarea id="contentai_skus" name="skus" rows="5" placeholder="SKU-1, SKU-2&#10;SKU-3"></textarea>
+                        <p class="contentai-bulk-note"><?= $block->escapeHtml(__('Separate SKUs by comma, space, or new line.')) ?></p>
+                    </div>
+                </div>
+            </section>
+            <section class="contentai-bulk-step" data-step="generation" hidden>
+                <div class="contentai-bulk-step-number">4</div>
+                <div class="contentai-bulk-step-body">
+                    <h3><?= $block->escapeHtml(__('Choose Content')) ?></h3>
+                    <div class="contentai-bulk-field">
+                        <label><?= $block->escapeHtml(__('Fields to Generate')) ?></label>
+                        <div class="contentai-bulk-checks">
+                            <?php foreach ($block->getFieldOptions() as $code => $label): ?>
+                                <label><input type="checkbox" name="fields[]" value="<?= $block->escapeHtmlAttr($code) ?>" data-field-choice><span><?= $block->escapeHtml(__($label)) ?></span></label>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <div class="contentai-bulk-field contentai-bulk-condition" data-content-condition hidden>
+                        <label><?= $block->escapeHtml(__('Products to Include')) ?></label>
+                        <div class="contentai-bulk-radio-list">
+                            <label><input type="radio" name="content_scope" value="missing" checked><span><?= $block->escapeHtml(__('Only products missing at least one selected field')) ?></span></label>
+                            <label><input type="radio" name="content_scope" value="all"><span><?= $block->escapeHtml(__('All selected products, including fields that already have content')) ?></span></label>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+        <div class="contentai-bulk-actions" hidden>
+            <span class="contentai-bulk-running"><?= $block->escapeHtml(__('Generating content. Keep this tab open until Bulk Reports loads.')) ?></span>
+            <button type="submit" class="action-primary" disabled><span><?= $block->escapeHtml(__('Start Bulk Generation')) ?></span></button>
+        </div>
+    </form>
+</div>
+<script>
+require(['jquery'], function ($) {
+    'use strict';
+    var $form = $('[data-contentai-bulk-form]');
+    var $storeStep = $form.find('[data-step="stores"]');
+    var $sourceStep = $form.find('[data-step="source"]');
+    var $generationStep = $form.find('[data-step="generation"]');
+    var $condition = $form.find('[data-content-condition]');
+    var $actions = $form.find('.contentai-bulk-actions');
+    var $submit = $form.find('button[type="submit"]');
+
+    function checkedValues(selector) {
+        return $form.find(selector + ':checked').map(function () { return String(this.value); }).get();
+    }
+
+    function hasValidSource() {
+        var source = $form.find('[data-source-choice]:checked').val();
+        if (source === 'category') {
+            return Boolean($form.find('#contentai_category_id').val());
+        }
+        return source === 'skus' && Boolean($.trim($form.find('#contentai_skus').val()));
+    }
+
+    function updateCategoryRows(activeStoreId) {
+        var query = $.trim($form.find('[data-category-search]').val()).toLocaleLowerCase();
+        var visibleCount = 0;
+        var selectedCategoryExists = false;
+        var selectedCategoryId = $form.find('#contentai_category_id').val();
+        $form.find('[data-category-item]').each(function () {
+            var $item = $(this);
+            var belongsToStore = String($item.data('category-store-id')) === String(activeStoreId || '');
+            var matchesSearch = !query || String($item.data('category-search-text')).indexOf(query) !== -1;
+            var visible = belongsToStore && matchesSearch;
+            $item.prop('hidden', !visible);
+            if (visible) { visibleCount++; }
+            if (belongsToStore && String($item.find('input').val()) === String(selectedCategoryId)) {
+                selectedCategoryExists = true;
+            }
         });
-    });</script>
+        if (selectedCategoryId && !selectedCategoryExists) {
+            $form.find('[data-category-choice]').prop('checked', false);
+            $form.find('#contentai_category_id').val('');
+        }
+        $form.find('[data-category-empty]').prop('hidden', visibleCount > 0);
+    }
+
+    function updateForm() {
+        var websiteIds = checkedValues('[data-website-choice]');
+        var websiteLookup = {};
+        $.each(websiteIds, function (_, id) { websiteLookup[id] = true; });
+        $form.find('[data-store-option]').each(function () {
+            var $option = $(this);
+            var visible = String($option.data('global-store')) === '1'
+                ? websiteIds.length > 0
+                : Boolean(websiteLookup[String($option.data('website-id'))]);
+            $option.prop('hidden', !visible);
+            if (!visible) { $option.find('input').prop('checked', false); }
+        });
+        var selectedStoreIds = checkedValues('[data-store-choice]');
+        var categoryStoreId = $.grep(selectedStoreIds, function (id) { return id !== '0'; })[0];
+        if (!categoryStoreId && websiteIds.length) {
+            categoryStoreId = $form.find('[data-website-choice][value="' + websiteIds[0] + '"]').data('default-store-id');
+        }
+        updateCategoryRows(categoryStoreId);
+        $storeStep.prop('hidden', websiteIds.length === 0);
+        var hasStores = selectedStoreIds.length > 0;
+        $sourceStep.prop('hidden', !hasStores);
+        var source = $form.find('[data-source-choice]:checked').val();
+        $form.find('[data-source-panel]').each(function () {
+            $(this).prop('hidden', $(this).data('source-panel') !== source);
+        });
+        var sourceReady = hasStores && hasValidSource();
+        $generationStep.prop('hidden', !sourceReady);
+        var hasFields = checkedValues('[data-field-choice]').length > 0;
+        $condition.prop('hidden', !hasFields);
+        $actions.prop('hidden', !(sourceReady && hasFields));
+        $submit.prop('disabled', !(sourceReady && hasFields));
+    }
+
+    $form.on('change', '[data-category-choice]', function () {
+        $form.find('#contentai_category_id').val(this.value);
+    });
+    $form.on('change input', 'input, select, textarea', updateForm);
+    $form.on('submit', function () {
+        $form.addClass('is-submitting');
+        $submit.prop('disabled', true);
+    });
+    updateForm();
+});
+</script>

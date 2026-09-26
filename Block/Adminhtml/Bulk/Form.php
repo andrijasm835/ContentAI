@@ -4,26 +4,34 @@ namespace Nistruct\ContentAI\Block\Adminhtml\Bulk;
 
 use Magento\Backend\Block\Template;
 use Magento\Catalog\Model\ResourceModel\Category\CollectionFactory as CategoryCollectionFactory;
+use Magento\Eav\Model\Config as EavConfig;
 use Magento\Framework\App\ResourceConnection;
-use Magento\Store\Model\System\Store as SystemStore;
+use Magento\Store\Model\StoreManagerInterface;
+use Nistruct\ContentAI\Model\Field\ProductFieldProvider;
 
 class Form extends Template
 {
-    private SystemStore $systemStore;
+    private StoreManagerInterface $storeManager;
     private CategoryCollectionFactory $categoryCollectionFactory;
     private ResourceConnection $resourceConnection;
+    private EavConfig $eavConfig;
+    private ProductFieldProvider $fieldProvider;
 
     public function __construct(
         Template\Context $context,
-        SystemStore $systemStore,
+        StoreManagerInterface $storeManager,
         CategoryCollectionFactory $categoryCollectionFactory,
         ResourceConnection $resourceConnection,
+        EavConfig $eavConfig,
+        ProductFieldProvider $fieldProvider,
         array $data = []
     ) {
         parent::__construct($context, $data);
-        $this->systemStore = $systemStore;
+        $this->storeManager = $storeManager;
         $this->categoryCollectionFactory = $categoryCollectionFactory;
         $this->resourceConnection = $resourceConnection;
+        $this->eavConfig = $eavConfig;
+        $this->fieldProvider = $fieldProvider;
     }
 
     public function getPostUrl(): string
@@ -31,19 +39,36 @@ class Form extends Template
         return $this->getUrl('nistruct_contentai/bulk/generate');
     }
 
+    public function getWebsiteOptions(): array
+    {
+        $options = [];
+        foreach ($this->storeManager->getWebsites() as $website) {
+            $defaultStore = $website->getDefaultStore();
+            $options[] = [
+                'value' => (int)$website->getId(),
+                'label' => (string)$website->getName(),
+                'default_store_id' => $defaultStore ? (int)$defaultStore->getId() : 0,
+            ];
+        }
+
+        return $options;
+    }
+
     public function getStoreOptions(): array
     {
-        $options = [['value' => 0, 'label' => __('All Store Views')]];
-
-        foreach ($this->systemStore->getStoreValuesForForm(false, true) as $option) {
-            if (is_array($option['value'] ?? null)) {
-                foreach ($option['value'] as $storeOption) {
-                    $options[] = $storeOption;
-                }
-                continue;
-            }
-
-            $options[] = $option;
+        $options = [[
+            'value' => 0,
+            'website_id' => 0,
+            'label' => (string)__('All Store Views'),
+            'is_global' => true,
+        ]];
+        foreach ($this->storeManager->getStores() as $store) {
+            $options[] = [
+                'value' => (int)$store->getId(),
+                'website_id' => (int)$store->getWebsiteId(),
+                'label' => (string)$store->getName(),
+                'is_global' => false,
+            ];
         }
 
         return $options;
@@ -51,30 +76,34 @@ class Form extends Template
 
     public function getFieldOptions(): array
     {
-        return [
-            'subtitle' => 'Subtitle',
-            'features' => 'Features',
-            'short_description' => 'Short Description',
-            'description' => 'Description',
-            'meta_title' => 'Meta Title',
-            'meta_keyword' => 'Meta Keywords',
-            'meta_description' => 'Meta Description',
-            'image_label' => 'Base Image Label',
-            'small_image_label' => 'Small Image Label',
-            'thumbnail_label' => 'Thumbnail Label',
-        ];
+        return array_column($this->fieldProvider->getFields(), 'label', 'code');
     }
 
-    public function getCategoryOptions(): array
+    public function getCategoryOptionGroups(): array
+    {
+        $groups = [];
+        foreach ($this->storeManager->getStores() as $store) {
+            $groups[(int)$store->getId()] = $this->getCategoryOptionsForStore(
+                (int)$store->getId(),
+                (int)$store->getWebsiteId(),
+                (int)$store->getRootCategoryId()
+            );
+        }
+
+        return $groups;
+    }
+
+    private function getCategoryOptionsForStore(int $storeId, int $websiteId, int $rootCategoryId): array
     {
         $collection = $this->categoryCollectionFactory->create();
+        $collection->setStoreId($storeId);
         $collection->addAttributeToSelect(['name', 'is_active', 'level', 'path'])
             ->addAttributeToFilter('is_active', 1)
-            ->addIsActiveFilter()
+            ->addFieldToFilter('path', ['like' => '1/' . $rootCategoryId . '/%'])
             ->setOrder('path', 'ASC');
 
-        $directProductCounts = $this->getDirectProductCounts();
-        $options = [['value' => 0, 'label' => __('Any Category')]];
+        $directProductIds = $this->getDirectProductIds($websiteId, $storeId);
+        $options = [];
         $categories = [];
 
         foreach ($collection as $category) {
@@ -92,50 +121,84 @@ class Form extends Template
         }
 
         foreach ($categories as $category) {
-            $productCount = $this->getBranchProductCount($category['path'], $categories, $directProductCounts);
+            $productCount = $this->getBranchProductCount($category['path'], $categories, $directProductIds);
             if ($productCount <= 0) {
                 continue;
             }
 
             $options[] = [
                 'value' => $category['id'],
-                'label' => $this->buildCategoryLabel($category['name'], $category['level'], $productCount),
+                'label' => $category['name'],
+                'path_label' => $this->buildCategoryPathLabel($category, $categories),
+                'depth' => max(0, $category['level'] - 2),
+                'product_count' => $productCount,
             ];
         }
 
         return $options;
     }
 
-    private function getDirectProductCounts(): array
+    private function getDirectProductIds(int $websiteId, int $storeId): array
     {
         $connection = $this->resourceConnection->getConnection();
-        $table = $this->resourceConnection->getTableName('catalog_category_product');
+        $categoryProductTable = $this->resourceConnection->getTableName('catalog_category_product');
+        $productWebsiteTable = $this->resourceConnection->getTableName('catalog_product_website');
+        $productIntTable = $this->resourceConnection->getTableName('catalog_product_entity_int');
+        $statusAttributeId = (int)$this->eavConfig->getAttribute('catalog_product', 'status')->getId();
         $select = $connection->select()
-            ->from($table, ['category_id', 'product_count' => new \Zend_Db_Expr('COUNT(DISTINCT product_id)')])
-            ->group('category_id');
+            ->from(['category_product' => $categoryProductTable], ['category_id', 'product_id'])
+            ->joinInner(
+                ['product_website' => $productWebsiteTable],
+                'product_website.product_id = category_product.product_id AND product_website.website_id = ' . $websiteId,
+                []
+            )
+            ->joinInner(
+                ['default_status' => $productIntTable],
+                'default_status.entity_id = category_product.product_id'
+                    . ' AND default_status.attribute_id = ' . $statusAttributeId
+                    . ' AND default_status.store_id = 0',
+                []
+            )
+            ->joinLeft(
+                ['store_status' => $productIntTable],
+                'store_status.entity_id = category_product.product_id'
+                    . ' AND store_status.attribute_id = ' . $statusAttributeId
+                    . ' AND store_status.store_id = ' . $storeId,
+                []
+            )
+            ->where('COALESCE(store_status.value, default_status.value) = ?', 1);
 
-        return array_map('intval', $connection->fetchPairs($select));
+        $productIds = [];
+        foreach ($connection->fetchAll($select) as $row) {
+            $productIds[(int)$row['category_id']][(int)$row['product_id']] = true;
+        }
+
+        return $productIds;
     }
 
-    private function getBranchProductCount(string $path, array $categories, array $directProductCounts): int
+    private function getBranchProductCount(string $path, array $categories, array $directProductIds): int
     {
-        $count = 0;
+        $productIds = [];
         $prefix = $path . '/';
 
         foreach ($categories as $category) {
             if ($category['path'] === $path || strpos($category['path'], $prefix) === 0) {
-                $count += (int)($directProductCounts[$category['id']] ?? 0);
+                $productIds += $directProductIds[$category['id']] ?? [];
             }
         }
 
-        return $count;
+        return count($productIds);
     }
 
-    private function buildCategoryLabel(string $name, int $level, int $productCount): string
+    private function buildCategoryPathLabel(array $category, array $categories): string
     {
-        $depth = max(0, $level - 2);
-        $prefix = $depth ? str_repeat('    ', $depth) . '- ' : '';
+        $names = [];
+        foreach (array_map('intval', explode('/', $category['path'])) as $categoryId) {
+            if (isset($categories[$categoryId])) {
+                $names[] = $categories[$categoryId]['name'];
+            }
+        }
 
-        return $prefix . $name . ' (' . $productCount . ')';
+        return implode(' / ', $names);
     }
 }

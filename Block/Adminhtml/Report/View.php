@@ -4,14 +4,15 @@ namespace Nistruct\ContentAI\Block\Adminhtml\Report;
 use Magento\Backend\Block\Template;
 use Magento\Backend\Block\Template\Context;
 use Magento\Catalog\Api\ProductRepositoryInterface;
+use Magento\Eav\Model\Config as EavConfig;
 use Magento\Framework\Registry;
+use Nistruct\ContentAI\Model\Field\ProductFieldProvider;
 use Nistruct\ContentAI\Model\Report;
 
 class View extends Template
 {
     private const PRODUCT_FIELD_ORDER = [
-        'subtitle',
-        'features',
+        'name',
         'short_description',
         'description',
         'meta_title',
@@ -31,16 +32,19 @@ class View extends Template
 
     private $registry;
     private $productRepository;
+    private EavConfig $eavConfig;
 
     public function __construct(
         Context $context,
         Registry $registry,
         ProductRepositoryInterface $productRepository,
+        EavConfig $eavConfig,
         array $data = []
     ) {
         parent::__construct($context, $data);
         $this->registry = $registry;
         $this->productRepository = $productRepository;
+        $this->eavConfig = $eavConfig;
     }
 
     public function getReport(): ?Report
@@ -76,7 +80,10 @@ class View extends Template
             return '';
         }
 
-        return $this->getUrl('catalog/category/edit', ['id' => (int) $report->getData('category_id')]);
+        return $this->getUrl('catalog/category/edit', [
+            'id' => (int)$report->getData('category_id'),
+            'store' => max(0, (int)$report->getData('store_id')),
+        ]);
     }
 
     public function getEntityTypeLabel(): string
@@ -117,15 +124,23 @@ class View extends Template
     {
         $fields = $this->getDecodedFields();
         $rows = [];
-        $fieldOrder = $this->getEntityTypeLabel() === 'Category' ? self::CATEGORY_FIELD_ORDER : self::PRODUCT_FIELD_ORDER;
+        $fieldOrder = $this->getEntityTypeLabel() === 'Category'
+            ? self::CATEGORY_FIELD_ORDER
+            : self::PRODUCT_FIELD_ORDER;
         foreach ($fieldOrder as $code) {
-            $rows[$code] = $fields[$code] ?? '';
-        }
-        foreach ($fields as $code => $value) {
-            if (!isset($rows[$code])) {
-                $rows[$code] = $value;
+            if (array_key_exists($code, $fields)) {
+                $rows[$code] = $fields[$code];
             }
         }
+
+        $remaining = array_diff_key($fields, $rows);
+        uksort($remaining, function (string $left, string $right): int {
+            return strnatcasecmp($this->getFieldLabel($left), $this->getFieldLabel($right));
+        });
+        foreach ($remaining as $code => $value) {
+            $rows[$code] = $value;
+        }
+
         return $rows;
     }
 
@@ -156,55 +171,35 @@ class View extends Template
         return $fields;
     }
 
-    public function getUsageMetadata(): array
-    {
-        $report = $this->getReport();
-        $decoded = $report ? json_decode((string) $report->getData('usage_metadata'), true) : [];
-        return is_array($decoded) ? $decoded : [];
-    }
-
-    public function getUsageRows(): array
-    {
-        $usage = $this->getUsageMetadata();
-        if (!$usage) {
-            return [];
-        }
-
-        return [
-            'Provider' => (string) ($usage['provider'] ?? '-'),
-            'Model' => (string) ($usage['model'] ?? '-'),
-            'Input Tokens' => (string) (int) ($usage['input_tokens'] ?? 0),
-            'Output Tokens' => (string) (int) ($usage['output_tokens'] ?? 0),
-            'Total Tokens' => (string) (int) ($usage['total_tokens'] ?? 0),
-            'Estimated Cost' => $this->formatCost($usage),
-        ];
-    }
-
     public function getFieldLabel(string $code): string
     {
-        return [
+        $fallbackLabel = ucwords(str_replace('_', ' ', $code));
+        if (isset(ProductFieldProvider::PSEUDO_FIELDS[$code])) {
+            return ProductFieldProvider::PSEUDO_FIELDS[$code];
+        }
+
+        $legacyLabels = [
             'subtitle' => 'Subtitle',
             'features' => 'Features',
-            'short_description' => 'Short Description',
-            'description' => 'Description',
-            'meta_title' => 'Meta Title',
-            'meta_keyword' => 'Meta Keywords',
-            'meta_keywords' => 'Meta Keywords',
-            'meta_description' => 'Meta Description',
-            'image_label' => 'Base Image Label',
-            'small_image_label' => 'Small Image Label',
-            'thumbnail_label' => 'Thumbnail Label',
-        ][$code] ?? ucwords(str_replace('_', ' ', $code));
-    }
-
-    private function formatCost(array $usage): string
-    {
-        $cost = (float) ($usage['estimated_cost'] ?? 0);
-        $currency = (string) ($usage['currency'] ?? 'USD');
-        if ($cost <= 0) {
-            return '-';
+        ];
+        if (isset($legacyLabels[$code])) {
+            return $legacyLabels[$code];
         }
-        return $currency . ' ' . number_format($cost, 6);
+
+        try {
+            $entityType = $this->getEntityTypeLabel() === 'Category' ? 'catalog_category' : 'catalog_product';
+            $attribute = $this->eavConfig->getAttribute($entityType, $code);
+            if ($attribute && (int)$attribute->getAttributeId()) {
+                $label = trim((string)$attribute->getDefaultFrontendLabel());
+                if ($label !== '') {
+                    return $label;
+                }
+            }
+        } catch (\Exception $e) {
+            return $fallbackLabel;
+        }
+
+        return $fallbackLabel;
     }
 
     private function normalizeFieldCode(string $code, string $entityType): string

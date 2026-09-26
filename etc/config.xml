@@ -5,17 +5,16 @@
             <general>
                 <enabled>1</enabled>
                 <debug_log>0</debug_log>
+                <default_content_locale>en_US</default_content_locale>
+                <product_attributes>name,short_description,description,meta_title,meta_keyword,meta_description,image_label,small_image_label,thumbnail_label</product_attributes>
+                <category_attributes>name,description,meta_title,meta_keywords,meta_description</category_attributes>
             </general>
             <api>
                 <provider>openai</provider>
-                <openai_model>gpt-5.4-mini</openai_model>
+                <openai_model>gpt-5.6-luna</openai_model>
                 <openai_max_tokens>1200</openai_max_tokens>
-                <openai_input_price>0</openai_input_price>
-                <openai_output_price>0</openai_output_price>
                 <anthropic_model>claude-sonnet-5</anthropic_model>
                 <anthropic_max_tokens>1200</anthropic_max_tokens>
-                <anthropic_input_price>0</anthropic_input_price>
-                <anthropic_output_price>0</anthropic_output_price>
             </api>
         </contentai>
     </default>

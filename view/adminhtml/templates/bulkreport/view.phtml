@@ -2,7 +2,6 @@
 /** @var \Nistruct\ContentAI\Block\Adminhtml\BulkReport\View $block */
 $report = $block->getReport();
 $products = $block->getProducts();
-$usageRows = $block->getUsageRows();
 ?>
 <?php if ($report): ?>
 <style>
@@ -12,10 +11,6 @@ $usageRows = $block->getUsageRows();
     .contentai-bulk-summary-item { background: #fff; border: 1px solid #d6d6d6; border-left: 4px solid #eb5202; padding: 14px 16px; }
     .contentai-bulk-summary-label { color: #666; display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; text-transform: uppercase; }
     .contentai-bulk-summary-item strong { display: block; font-size: 15px; overflow-wrap: anywhere; }
-    .contentai-bulk-usage { background: #fff; border: 1px solid #d6d6d6; display: grid; gap: 0; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin: -6px 0 20px; }
-    .contentai-bulk-usage-item { border-right: 1px solid #e5e5e5; padding: 12px 14px; }
-    .contentai-bulk-usage-label { color: #666; display: block; font-size: 11px; font-weight: 700; margin-bottom: 5px; text-transform: uppercase; }
-    .contentai-bulk-usage-value { font-weight: 600; overflow-wrap: anywhere; }
     .contentai-bulk-workspace { background: #fff; border: 1px solid #d6d6d6; display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 520px; }
     .contentai-bulk-tabs { background: #f8f8f8; border-right: 1px solid #d6d6d6; max-height: 720px; overflow: auto; }
     .contentai-bulk-tab { background: transparent; border: 0; border-bottom: 1px solid #e5e5e5; color: #303030; cursor: pointer; display: block; padding: 13px 16px; text-align: left; width: 100%; }
@@ -54,7 +49,7 @@ $usageRows = $block->getUsageRows();
 
     <section class="contentai-bulk-summary">
         <div class="contentai-bulk-summary-item">
-            <span class="contentai-bulk-summary-label"><?= $block->escapeHtml(__('Bulk Report ID')) ?></span>
+            <span class="contentai-bulk-summary-label"><?= $block->escapeHtml(__('Batch ID')) ?></span>
             <strong><?= (int) $report->getId() ?></strong>
         </div>
         <div class="contentai-bulk-summary-item">
@@ -66,25 +61,14 @@ $usageRows = $block->getUsageRows();
             <strong><?= (int) $block->getPendingCount() ?></strong>
         </div>
         <div class="contentai-bulk-summary-item">
-            <span class="contentai-bulk-summary-label"><?= $block->escapeHtml(__('Store ID')) ?></span>
+            <span class="contentai-bulk-summary-label"><?= $block->escapeHtml(__('Store View ID')) ?></span>
             <strong><?= $block->escapeHtml((string) $report->getData('store_id')) ?></strong>
         </div>
         <div class="contentai-bulk-summary-item">
-            <span class="contentai-bulk-summary-label"><?= $block->escapeHtml(__('Created At')) ?></span>
+            <span class="contentai-bulk-summary-label"><?= $block->escapeHtml(__('Created')) ?></span>
             <strong><?= $block->escapeHtml((string) $report->getData('created_at')) ?></strong>
         </div>
     </section>
-
-    <?php if ($usageRows): ?>
-        <section class="contentai-bulk-usage">
-            <?php foreach ($usageRows as $label => $value): ?>
-                <div class="contentai-bulk-usage-item">
-                    <span class="contentai-bulk-usage-label"><?= $block->escapeHtml(__($label)) ?></span>
-                    <span class="contentai-bulk-usage-value"><?= $block->escapeHtml($value) ?></span>
-                </div>
-            <?php endforeach; ?>
-        </section>
-    <?php endif; ?>
 
     <form action="<?= $block->escapeUrl($block->getApplyUrl()) ?>" method="post">
         <?= $block->getBlockHtml('formkey') ?>

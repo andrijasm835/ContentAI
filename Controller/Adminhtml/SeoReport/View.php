@@ -31,14 +31,14 @@ class View extends Action
         $id = (int) $this->getRequest()->getParam('id');
         $report = $this->seoReportFactory->create()->load($id);
         if (!$report->getId()) {
-            $this->messageManager->addErrorMessage(__('SEO report no longer exists.'));
+            $this->messageManager->addErrorMessage(__('SEO check no longer exists.'));
             return $this->_redirect('*/*/index');
         }
 
         $this->registry->register('current_contentai_seo_report', $report);
         $page = $this->resultPageFactory->create();
         $page->setActiveMenu('Nistruct_ContentAI::seo_report_menu');
-        $page->getConfig()->getTitle()->prepend(__('ContentAI SEO Report #%1', $report->getId()));
+        $page->getConfig()->getTitle()->prepend(__('SEO Check #%1', $report->getId()));
         return $page;
     }
 

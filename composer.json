@@ -1,9 +1,20 @@
 {
     "name": "nistruct/magento2-content-ai",
-    "description": "Magento 2 Content Generator Extension",
+    "description": "Scope-aware AI content generation and SEO analysis for Magento 2 catalogs",
     "type": "magento2-module",
-    "version": "1.0.1",
     "license": "GPL-3.0-or-later",
+    "require": {
+        "php": ">=8.1 <8.4",
+        "magento/framework": "^103.0",
+        "magento/module-backend": "^102.0",
+        "magento/module-catalog": "^104.0",
+        "magento/module-cms": "^104.0",
+        "magento/module-config": "^101.2",
+        "magento/module-eav": "^102.1",
+        "magento/module-store": "^101.1",
+        "magento/module-ui": "^101.2",
+        "psr/log": "^1.1 || ^2.0 || ^3.0"
+    },
     "authors": [
         {
             "name": "Nistruct"

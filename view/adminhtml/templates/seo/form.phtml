@@ -1,91 +1,199 @@
-<?php /** @var \Nistruct\ContentAI\Block\Adminhtml\Seo\Form $block */ ?>
-<style>
-    .contentai-seo-page { max-width: 1180px; }
-    .contentai-seo-form { background: #fff; border: 1px solid #d6d6d6; }
-    .contentai-seo-header { border-bottom: 1px solid #e5e5e5; padding: 18px 22px; }
-    .contentai-seo-header h2 { font-size: 20px; margin: 0 0 6px; }
-    .contentai-seo-header p { color: #666; margin: 0; }
-    .contentai-seo-grid { display: grid; gap: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-    .contentai-seo-section { padding: 22px; }
-    .contentai-seo-section + .contentai-seo-section { border-left: 1px solid #e5e5e5; }
-    .contentai-seo-field { margin-bottom: 18px; }
-    .contentai-seo-field label { display: block; font-weight: 600; margin-bottom: 7px; }
-    .contentai-seo-field input, .contentai-seo-field select { max-width: 100%; width: 100%; }
-    .contentai-seo-note { color: #666; font-size: 12px; line-height: 1.45; margin: 6px 0 0; }
-    .contentai-seo-list { margin: 0; padding-left: 18px; }
-    .contentai-seo-actions { border-top: 1px solid #e5e5e5; padding: 18px 22px; text-align: right; }
-    .contentai-seo-running { color: #666; display: none; margin-right: 14px; }
-    .contentai-seo-form.is-submitting .contentai-seo-running { display: inline-block; }
-    @media (max-width: 900px) {
-        .contentai-seo-grid { grid-template-columns: 1fr; }
-        .contentai-seo-section + .contentai-seo-section { border-left: 0; border-top: 1px solid #e5e5e5; }
-    }
-</style>
+<?php
+/** @var \Nistruct\ContentAI\Block\Adminhtml\Seo\Form $block */
+$selectedProductCategories = $block->getCurrentArrayParam('product_category_ids');
+$selectedCategoryIds = $block->getCurrentArrayParam('category_ids');
+$selectedCmsPageIds = $block->getCurrentArrayParam('cms_page_ids');
+$selectedProductMissing = $block->getCurrentArrayParam('product_missing_fields');
+$selectedCategoryMissing = $block->getCurrentArrayParam('category_missing_fields');
+$selectedCmsMissing = $block->getCurrentArrayParam('cms_missing_fields');
+$currentScope = $block->hasCurrentScope() ? $block->getCurrentScope() : '';
+$currentStoreId = $block->getCurrentStoreId();
+?>
 <div class="contentai-seo-page">
     <form class="contentai-seo-form" action="<?= $block->escapeUrl($block->getPostUrl()) ?>" method="post" data-contentai-seo-form>
         <?= $block->getBlockHtml('formkey') ?>
-        <div class="contentai-seo-header">
-            <h2><?= $block->escapeHtml(__('SEO Analyzer')) ?></h2>
-            <p><?= $block->escapeHtml(__('Scan products, categories, and CMS pages with their related URL rewrites, then review issues and recommendations in SEO Reports. This audit does not change any data.')) ?></p>
-        </div>
-        <div class="contentai-seo-grid">
-            <section class="contentai-seo-section">
-                <div class="contentai-seo-field">
-                    <label for="contentai_seo_scope"><?= $block->escapeHtml(__('Audit Scope')) ?></label>
-                    <select id="contentai_seo_scope" name="scope">
-                        <?php foreach ($block->getScopeOptions() as $value => $label): ?>
-                            <option value="<?= $block->escapeHtmlAttr($value) ?>"<?= $value === $block->getCurrentScope() ? ' selected="selected"' : '' ?>><?= $block->escapeHtml(__($label)) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="contentai-seo-field">
-                    <label for="contentai_seo_store_id"><?= $block->escapeHtml(__('Store View')) ?></label>
-                    <select id="contentai_seo_store_id" name="store_id">
-                        <?php foreach ($block->getStoreOptions() as $option): ?>
-                            <option value="<?= $block->escapeHtmlAttr((string) $option['value']) ?>"<?= (int) $option['value'] === $block->getCurrentStoreId() ? ' selected="selected"' : '' ?>><?= $block->escapeHtml((string) $option['label']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                    <p class="contentai-seo-note"><?= $block->escapeHtml(__('Related URL rewrites are checked inside each selected entity type for the chosen store view.')) ?></p>
-                </div>
-                <div class="contentai-seo-field">
-                    <label for="contentai_seo_limit"><?= $block->escapeHtml(__('Maximum Items Per Section')) ?></label>
-                    <input id="contentai_seo_limit" name="limit" type="number" min="1" max="500" value="<?= (int) $block->getCurrentLimit() ?>"/>
-                    <p class="contentai-seo-note"><?= $block->escapeHtml(__('Keep this moderate while testing. Use the next batch link in a report to continue from the next set.')) ?></p>
-                </div>
-                <div class="contentai-seo-field">
-                    <label for="contentai_seo_offset"><?= $block->escapeHtml(__('Start From Item')) ?></label>
-                    <input id="contentai_seo_offset" name="offset" type="number" min="0" step="1" value="<?= (int) $block->getCurrentOffset() ?>"/>
-                    <p class="contentai-seo-note"><?= $block->escapeHtml(__('Usually keep this at 0. Reports with more available items can open the next batch automatically.')) ?></p>
-                </div>
-            </section>
-            <section class="contentai-seo-section">
-                <h2><?= $block->escapeHtml(__('Checks Included')) ?></h2>
-                <ul class="contentai-seo-list">
-                    <li><?= $block->escapeHtml(__('Missing, short, long, and duplicate meta titles.')) ?></li>
-                    <li><?= $block->escapeHtml(__('Missing, short, long, and duplicate meta descriptions.')) ?></li>
-                    <li><?= $block->escapeHtml(__('Missing meta keywords where the project still uses them.')) ?></li>
-                    <li><?= $block->escapeHtml(__('Missing or suspicious URL keys.')) ?></li>
-                    <li><?= $block->escapeHtml(__('Active and legacy URL rewrites connected to each product, category, or CMS page.')) ?></li>
-                    <li><?= $block->escapeHtml(__('Duplicate, empty, suspicious, missing, or obsolete URL rewrite paths.')) ?></li>
-                </ul>
-            </section>
-        </div>
-        <div class="contentai-seo-actions">
-            <span class="contentai-seo-running"><?= $block->escapeHtml(__('Running SEO audit...')) ?></span>
+        <header class="contentai-seo-header">
+            <div>
+                <h2><?= $block->escapeHtml(__('SEO Health Check')) ?></h2>
+                <p><?= $block->escapeHtml(__('Run a read-only audit and review issues in SEO Reports. No catalog data is changed.')) ?></p>
+            </div>
             <button type="button" class="action-default" onclick="location.href='<?= $block->escapeUrl($block->getReportUrl()) ?>'">
                 <span><?= $block->escapeHtml(__('View Reports')) ?></span>
             </button>
-            <button type="submit" class="action-primary">
-                <span><?= $block->escapeHtml(__('Run SEO Audit')) ?></span>
-            </button>
+        </header>
+
+        <div class="contentai-seo-steps">
+            <section class="contentai-seo-step" data-seo-step="store">
+                <div class="contentai-seo-step-number">1</div>
+                <div class="contentai-seo-step-body">
+                    <h3><?= $block->escapeHtml(__('Choose Store View')) ?></h3>
+                    <p><?= $block->escapeHtml(__('The audit reads localized SEO values and URL rewrites from this scope.')) ?></p>
+                    <select id="contentai_seo_store_id" name="store_id" data-seo-store required>
+                        <option value=""><?= $block->escapeHtml(__('Select a store view')) ?></option>
+                        <?php foreach ($block->getStoreOptions() as $option): ?>
+                            <option value="<?= $block->escapeHtmlAttr((string)$option['value']) ?>"
+                                <?= $block->hasCurrentStore() && (int)$option['value'] === $currentStoreId ? ' selected="selected"' : '' ?>>
+                                <?= $block->escapeHtml((string)$option['website'] . ' / ' . (string)$option['label']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </section>
+
+            <section class="contentai-seo-step" data-seo-step="scope" hidden>
+                <div class="contentai-seo-step-number">2</div>
+                <div class="contentai-seo-step-body">
+                    <h3><?= $block->escapeHtml(__('Choose What to Audit')) ?></h3>
+                    <div class="contentai-seo-scope-options">
+                        <?php foreach ($block->getScopeOptions() as $value => $label): ?>
+                            <label>
+                                <input type="radio" name="scope" value="<?= $block->escapeHtmlAttr($value) ?>" data-seo-scope required
+                                    <?= $value === $currentScope ? ' checked="checked"' : '' ?>>
+                                <span><?= $block->escapeHtml(__($label)) ?></span>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </section>
+
+            <section class="contentai-seo-step" data-seo-step="filters" hidden>
+                <div class="contentai-seo-step-number">3</div>
+                <div class="contentai-seo-step-body">
+                    <h3><?= $block->escapeHtml(__('Narrow the Audit')) ?></h3>
+                    <p><?= $block->escapeHtml(__('Filters are optional. Leave a section unchanged to audit everything in that scope.')) ?></p>
+
+                    <div class="contentai-seo-filter-panel" data-contentai-scope-panel="products" hidden>
+                        <h4><?= $block->escapeHtml(__('Product Filters')) ?></h4>
+                        <div class="contentai-seo-filter-grid">
+                            <div class="contentai-seo-field">
+                                <label for="contentai_product_category_ids"><?= $block->escapeHtml(__('Categories')) ?></label>
+                                <select id="contentai_product_category_ids" name="product_category_ids[]" multiple size="7">
+                                    <?php foreach ($block->getCategoryOptions(false) as $option): $value = (string)$option['value']; ?>
+                                        <option value="<?= $block->escapeHtmlAttr($value) ?>"<?= in_array($value, $selectedProductCategories, true) ? ' selected="selected"' : '' ?>><?= $block->escapeHtml((string)$option['label']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="contentai-seo-field">
+                                <label for="contentai_product_skus"><?= $block->escapeHtml(__('Specific SKUs')) ?></label>
+                                <textarea id="contentai_product_skus" name="product_skus" placeholder="SKU-1, SKU-2&#10;SKU-3"><?= $block->escapeHtml($block->getCurrentParam('product_skus')) ?></textarea>
+                            </div>
+                            <div class="contentai-seo-field contentai-seo-field-small">
+                                <label for="contentai_product_status"><?= $block->escapeHtml(__('Status')) ?></label>
+                                <?php $productStatus = $block->getCurrentParam('product_status'); ?>
+                                <select id="contentai_product_status" name="product_status">
+                                    <option value=""<?= $productStatus === '' ? ' selected="selected"' : '' ?>><?= $block->escapeHtml(__('Any Status')) ?></option>
+                                    <option value="1"<?= $productStatus === '1' ? ' selected="selected"' : '' ?>><?= $block->escapeHtml(__('Enabled')) ?></option>
+                                    <option value="2"<?= $productStatus === '2' ? ' selected="selected"' : '' ?>><?= $block->escapeHtml(__('Disabled')) ?></option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="contentai-seo-missing-group">
+                            <strong><?= $block->escapeHtml(__('Only items missing')) ?></strong>
+                            <?php foreach ($block->getProductMissingFieldOptions() as $code => $label): ?>
+                                <label><input type="checkbox" name="product_missing_fields[]" value="<?= $block->escapeHtmlAttr($code) ?>"<?= in_array($code, $selectedProductMissing, true) ? ' checked="checked"' : '' ?>><span><?= $block->escapeHtml(__($label)) ?></span></label>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+
+                    <div class="contentai-seo-filter-panel" data-contentai-scope-panel="categories" hidden>
+                        <h4><?= $block->escapeHtml(__('Category Filters')) ?></h4>
+                        <div class="contentai-seo-filter-grid contentai-seo-filter-grid-two">
+                            <div class="contentai-seo-field">
+                                <label for="contentai_category_ids"><?= $block->escapeHtml(__('Specific Categories')) ?></label>
+                                <select id="contentai_category_ids" name="category_ids[]" multiple size="7">
+                                    <?php foreach ($block->getCategoryOptions(false) as $option): $value = (string)$option['value']; ?>
+                                        <option value="<?= $block->escapeHtmlAttr($value) ?>"<?= in_array($value, $selectedCategoryIds, true) ? ' selected="selected"' : '' ?>><?= $block->escapeHtml((string)$option['label']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="contentai-seo-field contentai-seo-field-small">
+                                <label for="contentai_category_active"><?= $block->escapeHtml(__('Status')) ?></label>
+                                <?php $categoryActive = $block->getCurrentParam('category_active'); ?>
+                                <select id="contentai_category_active" name="category_active">
+                                    <option value=""<?= $categoryActive === '' ? ' selected="selected"' : '' ?>><?= $block->escapeHtml(__('Any Status')) ?></option>
+                                    <option value="1"<?= $categoryActive === '1' ? ' selected="selected"' : '' ?>><?= $block->escapeHtml(__('Active')) ?></option>
+                                    <option value="0"<?= $categoryActive === '0' ? ' selected="selected"' : '' ?>><?= $block->escapeHtml(__('Inactive')) ?></option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="contentai-seo-missing-group">
+                            <strong><?= $block->escapeHtml(__('Only items missing')) ?></strong>
+                            <?php foreach ($block->getCategoryMissingFieldOptions() as $code => $label): ?>
+                                <label><input type="checkbox" name="category_missing_fields[]" value="<?= $block->escapeHtmlAttr($code) ?>"<?= in_array($code, $selectedCategoryMissing, true) ? ' checked="checked"' : '' ?>><span><?= $block->escapeHtml(__($label)) ?></span></label>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+
+                    <div class="contentai-seo-filter-panel" data-contentai-scope-panel="cms" hidden>
+                        <h4><?= $block->escapeHtml(__('CMS Page Filters')) ?></h4>
+                        <div class="contentai-seo-filter-grid contentai-seo-filter-grid-two">
+                            <div class="contentai-seo-field">
+                                <label for="contentai_cms_page_ids"><?= $block->escapeHtml(__('Specific CMS Pages')) ?></label>
+                                <select id="contentai_cms_page_ids" name="cms_page_ids[]" multiple size="7">
+                                    <?php foreach ($block->getCmsPageOptions() as $option): if ((int)$option['value'] === 0) { continue; } $value = (string)$option['value']; ?>
+                                        <option value="<?= $block->escapeHtmlAttr($value) ?>"<?= in_array($value, $selectedCmsPageIds, true) ? ' selected="selected"' : '' ?>><?= $block->escapeHtml((string)$option['label']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="contentai-seo-field contentai-seo-field-small">
+                                <label for="contentai_cms_active"><?= $block->escapeHtml(__('Status')) ?></label>
+                                <?php $cmsActive = $block->getCurrentParam('cms_active'); ?>
+                                <select id="contentai_cms_active" name="cms_active">
+                                    <option value=""<?= $cmsActive === '' ? ' selected="selected"' : '' ?>><?= $block->escapeHtml(__('Any Status')) ?></option>
+                                    <option value="1"<?= $cmsActive === '1' ? ' selected="selected"' : '' ?>><?= $block->escapeHtml(__('Active')) ?></option>
+                                    <option value="0"<?= $cmsActive === '0' ? ' selected="selected"' : '' ?>><?= $block->escapeHtml(__('Inactive')) ?></option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="contentai-seo-missing-group">
+                            <strong><?= $block->escapeHtml(__('Only items missing')) ?></strong>
+                            <?php foreach ($block->getCmsMissingFieldOptions() as $code => $label): ?>
+                                <label><input type="checkbox" name="cms_missing_fields[]" value="<?= $block->escapeHtmlAttr($code) ?>"<?= in_array($code, $selectedCmsMissing, true) ? ' checked="checked"' : '' ?>><span><?= $block->escapeHtml(__($label)) ?></span></label>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="contentai-seo-step" data-seo-step="batch" hidden>
+                <div class="contentai-seo-step-number">4</div>
+                <div class="contentai-seo-step-body">
+                    <h3><?= $block->escapeHtml(__('Batch')) ?></h3>
+                    <div class="contentai-seo-batch-fields">
+                        <label><span><?= $block->escapeHtml(__('Items per section')) ?></span><input name="limit" type="number" min="1" max="500" value="<?= (int)$block->getCurrentLimit() ?>"></label>
+                        <label><span><?= $block->escapeHtml(__('Start from')) ?></span><input name="offset" type="number" min="0" value="<?= (int)$block->getCurrentOffset() ?>"></label>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <div class="contentai-seo-actions" hidden>
+            <span class="contentai-seo-running"><?= $block->escapeHtml(__('Running SEO audit...')) ?></span>
+            <button type="submit" class="action-primary"><span><?= $block->escapeHtml(__('Run SEO Audit')) ?></span></button>
         </div>
     </form>
 </div>
 <script>
 require(['jquery'], function ($) {
-    $('[data-contentai-seo-form]').on('submit', function () {
-        $(this).addClass('is-submitting');
-        $(this).find('button[type="submit"]').prop('disabled', true);
+    'use strict';
+    var $form = $('[data-contentai-seo-form]');
+
+    function updateForm() {
+        var hasStore = $form.find('[data-seo-store]').val() !== '';
+        var scope = $form.find('[data-seo-scope]:checked').val() || '';
+        $form.find('[data-seo-step="scope"]').prop('hidden', !hasStore);
+        $form.find('[data-seo-step="filters"], [data-seo-step="batch"], .contentai-seo-actions').prop('hidden', !scope);
+        $form.find('[data-contentai-scope-panel]').each(function () {
+            var panel = $(this).data('contentai-scope-panel');
+            $(this).prop('hidden', !(scope === 'all' || scope === panel));
+        });
+    }
+
+    $form.on('change', '[data-seo-store], [data-seo-scope]', updateForm);
+    $form.on('submit', function () {
+        $form.addClass('is-submitting');
+        $form.find('button[type="submit"]').prop('disabled', true);
     });
+    updateForm();
 });
 </script>

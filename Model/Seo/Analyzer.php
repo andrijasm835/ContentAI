@@ -6,53 +6,75 @@ use Magento\Catalog\Model\ResourceModel\Category\CollectionFactory as CategoryCo
 use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory as ProductCollectionFactory;
 use Magento\Cms\Model\ResourceModel\Page\CollectionFactory as PageCollectionFactory;
 use Magento\Framework\App\ResourceConnection;
+use Magento\Framework\Exception\LocalizedException;
+use Magento\Store\Model\StoreManagerInterface;
 
 class Analyzer
 {
     private const SEVERITY_CRITICAL = 'critical';
     private const SEVERITY_WARNING = 'warning';
     private const SEVERITY_NOTICE = 'notice';
+    private const AI_FIXABLE_CODES = [
+        'missing_meta_title' => true,
+        'long_meta_title' => true,
+        'short_meta_title' => true,
+        'duplicate_meta_title' => true,
+        'missing_meta_description' => true,
+        'long_meta_description' => true,
+        'short_meta_description' => true,
+        'duplicate_meta_description' => true,
+        'missing_meta_keywords' => true,
+        'url_key_may_not_match_name' => true,
+    ];
 
     private ProductCollectionFactory $productCollectionFactory;
     private CategoryCollectionFactory $categoryCollectionFactory;
     private PageCollectionFactory $pageCollectionFactory;
     private ResourceConnection $resourceConnection;
+    private StoreManagerInterface $storeManager;
 
     public function __construct(
         ProductCollectionFactory $productCollectionFactory,
         CategoryCollectionFactory $categoryCollectionFactory,
         PageCollectionFactory $pageCollectionFactory,
-        ResourceConnection $resourceConnection
+        ResourceConnection $resourceConnection,
+        StoreManagerInterface $storeManager
     ) {
         $this->productCollectionFactory = $productCollectionFactory;
         $this->categoryCollectionFactory = $categoryCollectionFactory;
         $this->pageCollectionFactory = $pageCollectionFactory;
         $this->resourceConnection = $resourceConnection;
+        $this->storeManager = $storeManager;
     }
 
-    public function analyze(string $scope, int $storeId, int $limit, int $offset = 0): array
+    public function analyze(string $scope, int $storeId, int $limit, int $offset = 0, array $filters = []): array
     {
+        if ($storeId <= 0) {
+            throw new LocalizedException(__('Select a concrete store view for the SEO audit.'));
+        }
+        $this->storeManager->getStore($storeId);
         $scope = in_array($scope, ['all', 'products', 'categories', 'cms'], true) ? $scope : 'all';
         $limit = max(1, min(500, $limit));
         $offset = max(0, $offset);
         $offset = (int) (floor($offset / $limit) * $limit);
+        $filters = $this->normalizeFilters($filters);
         $sections = [];
         $duplicatePaths = $this->getDuplicateRequestPaths($storeId);
 
         if ($scope === 'all' || $scope === 'products') {
-            $sections['products'] = $this->analyzeProducts($storeId, $limit, $offset, $duplicatePaths);
+            $sections['products'] = $this->analyzeProducts($storeId, $limit, $offset, $duplicatePaths, $filters);
         }
         if ($scope === 'all' || $scope === 'categories') {
-            $sections['categories'] = $this->analyzeCategories($storeId, $limit, $offset, $duplicatePaths);
+            $sections['categories'] = $this->analyzeCategories($storeId, $limit, $offset, $duplicatePaths, $filters);
         }
         if ($scope === 'all' || $scope === 'cms') {
-            $sections['cms'] = $this->analyzeCmsPages($storeId, $limit, $offset, $duplicatePaths);
+            $sections['cms'] = $this->analyzeCmsPages($storeId, $limit, $offset, $duplicatePaths, $filters);
         }
 
-        return $this->summarize($scope, $storeId, $limit, $offset, $sections);
+        return $this->summarize($scope, $storeId, $limit, $offset, $filters, $sections);
     }
 
-    private function analyzeProducts(int $storeId, int $limit, int $offset, array $duplicatePaths): array
+    private function analyzeProducts(int $storeId, int $limit, int $offset, array $duplicatePaths, array $filters): array
     {
         $collection = $this->productCollectionFactory->create();
         $collection->setStoreId($storeId)
@@ -64,6 +86,21 @@ class Analyzer
         if ($storeId > 0) {
             $collection->addStoreFilter($storeId);
         }
+        if ($filters['product_category_ids']) {
+            $collection->addCategoriesFilter(['in' => $filters['product_category_ids']]);
+        }
+        if ($filters['product_skus']) {
+            $collection->addAttributeToFilter('sku', ['in' => $filters['product_skus']]);
+        }
+        if ($filters['product_status'] !== '') {
+            $collection->addAttributeToFilter('status', (int) $filters['product_status']);
+        }
+        $this->applyMissingAttributeFilters($collection, $filters['product_missing_fields'], [
+            'meta_title' => 'meta_title',
+            'meta_description' => 'meta_description',
+            'meta_keyword' => 'meta_keyword',
+            'url_key' => 'url_key',
+        ]);
 
         $items = [];
         $metaTitles = [];
@@ -104,15 +141,29 @@ class Analyzer
         return $this->section('Products', $items, $collection->getSize(), $offset);
     }
 
-    private function analyzeCategories(int $storeId, int $limit, int $offset, array $duplicatePaths): array
+    private function analyzeCategories(int $storeId, int $limit, int $offset, array $duplicatePaths, array $filters): array
     {
+        $rootCategoryId = (int)$this->storeManager->getStore($storeId)->getRootCategoryId();
         $collection = $this->categoryCollectionFactory->create();
         $collection->setStoreId($storeId)
             ->addAttributeToSelect(['name', 'is_active', 'url_key', 'meta_title', 'meta_keywords', 'meta_description'])
             ->addAttributeToFilter('level', ['gteq' => 2])
+            ->addFieldToFilter('path', ['like' => '1/' . $rootCategoryId . '/%'])
             ->setOrder('entity_id', 'ASC')
             ->setPageSize($limit)
             ->setCurPage($this->getPageFromOffset($limit, $offset));
+        if ($filters['category_ids']) {
+            $collection->addAttributeToFilter('entity_id', ['in' => $filters['category_ids']]);
+        }
+        if ($filters['category_active'] !== '') {
+            $collection->addAttributeToFilter('is_active', (int) $filters['category_active']);
+        }
+        $this->applyMissingAttributeFilters($collection, $filters['category_missing_fields'], [
+            'meta_title' => 'meta_title',
+            'meta_description' => 'meta_description',
+            'meta_keywords' => 'meta_keywords',
+            'url_key' => 'url_key',
+        ]);
 
         $items = [];
         $metaTitles = [];
@@ -153,12 +204,24 @@ class Analyzer
         return $this->section('Categories', $items, $collection->getSize(), $offset);
     }
 
-    private function analyzeCmsPages(int $storeId, int $limit, int $offset, array $duplicatePaths): array
+    private function analyzeCmsPages(int $storeId, int $limit, int $offset, array $duplicatePaths, array $filters): array
     {
         $collection = $this->pageCollectionFactory->create();
         if ($storeId > 0) {
             $collection->addStoreFilter($storeId);
         }
+        if ($filters['cms_page_ids']) {
+            $collection->addFieldToFilter('page_id', ['in' => $filters['cms_page_ids']]);
+        }
+        if ($filters['cms_active'] !== '') {
+            $collection->addFieldToFilter('is_active', (int) $filters['cms_active']);
+        }
+        $this->applyMissingFieldFilters($collection, $filters['cms_missing_fields'], [
+            'meta_title' => 'meta_title',
+            'meta_description' => 'meta_description',
+            'meta_keywords' => 'meta_keywords',
+            'identifier' => 'identifier',
+        ]);
         $collection->setOrder('page_id', 'ASC')
             ->setPageSize($limit)
             ->setCurPage($this->getPageFromOffset($limit, $offset));
@@ -214,6 +277,114 @@ class Analyzer
                 ->group('request_path')
                 ->having('COUNT(*) > 1')
         );
+    }
+
+    private function normalizeFilters(array $filters): array
+    {
+        return [
+            'product_category_ids' => $this->normalizeIds($filters['product_category_ids'] ?? []),
+            'product_skus' => $this->normalizeSkus($filters['product_skus'] ?? []),
+            'product_status' => $this->normalizeOptionalStatus($filters['product_status'] ?? ''),
+            'product_missing_fields' => $this->normalizeFieldCodes($filters['product_missing_fields'] ?? []),
+            'category_ids' => $this->normalizeIds($filters['category_ids'] ?? []),
+            'category_active' => $this->normalizeOptionalStatus($filters['category_active'] ?? ''),
+            'category_missing_fields' => $this->normalizeFieldCodes($filters['category_missing_fields'] ?? []),
+            'cms_page_ids' => $this->normalizeIds($filters['cms_page_ids'] ?? []),
+            'cms_active' => $this->normalizeOptionalStatus($filters['cms_active'] ?? ''),
+            'cms_missing_fields' => $this->normalizeFieldCodes($filters['cms_missing_fields'] ?? []),
+        ];
+    }
+
+    private function normalizeIds($value): array
+    {
+        if (!is_array($value)) {
+            $value = preg_split('/[\s,]+/', (string) $value) ?: [];
+        }
+
+        $ids = [];
+        foreach ($value as $item) {
+            $id = (int) $item;
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+
+        return array_values($ids);
+    }
+
+    private function normalizeSkus($value): array
+    {
+        if (is_array($value)) {
+            $value = implode(',', $value);
+        }
+
+        $skus = [];
+        foreach (preg_split('/[\s,]+/', (string) $value) ?: [] as $sku) {
+            $sku = trim($sku);
+            if ($sku !== '') {
+                $skus[$sku] = $sku;
+            }
+        }
+
+        return array_values($skus);
+    }
+
+    private function normalizeFieldCodes($value): array
+    {
+        if (!is_array($value)) {
+            $value = preg_split('/[\s,]+/', (string) $value) ?: [];
+        }
+
+        $fields = [];
+        foreach ($value as $field) {
+            $field = trim((string) $field);
+            if ($field !== '') {
+                $fields[$field] = $field;
+            }
+        }
+
+        return array_values($fields);
+    }
+
+    private function normalizeOptionalStatus($value): string
+    {
+        $value = trim((string) $value);
+        return in_array($value, ['0', '1', '2'], true) ? $value : '';
+    }
+
+    private function applyMissingAttributeFilters($collection, array $selectedFields, array $allowedFields): void
+    {
+        $conditions = [];
+        foreach ($selectedFields as $field) {
+            if (!isset($allowedFields[$field])) {
+                continue;
+            }
+            $attribute = $allowedFields[$field];
+            $conditions[] = ['attribute' => $attribute, 'null' => true];
+            $conditions[] = ['attribute' => $attribute, 'eq' => ''];
+        }
+
+        if ($conditions) {
+            $collection->addAttributeToFilter($conditions);
+        }
+    }
+
+    private function applyMissingFieldFilters($collection, array $selectedFields, array $allowedFields): void
+    {
+        $connection = $this->resourceConnection->getConnection();
+        $conditions = [];
+        foreach ($selectedFields as $field) {
+            if (!isset($allowedFields[$field])) {
+                continue;
+            }
+            $fieldName = $connection->quoteIdentifier($allowedFields[$field]);
+            $conditions[] = $fieldName . ' IS NULL';
+            $conditions[] = $fieldName . " = ''";
+        }
+
+        if ($conditions) {
+            $collection->getSelect()->where('(' . implode(' OR ', $conditions) . ')');
+        }
     }
 
     private function getEntityRewrites(string $entityType, int $entityId, int $storeId): array
@@ -353,7 +524,7 @@ class Analyzer
         }
     }
 
-    private function summarize(string $scope, int $storeId, int $limit, int $offset, array $sections): array
+    private function summarize(string $scope, int $storeId, int $limit, int $offset, array $filters, array $sections): array
     {
         $summary = [
             'scope' => $scope,
@@ -361,14 +532,19 @@ class Analyzer
             'limit' => $limit,
             'offset' => $offset,
             'next_offset' => $offset + $limit,
+            'filters' => $filters,
             'has_next_batch' => false,
+            'health_score' => 100,
+            'ai_fixable_items' => 0,
             'total_entities' => 0,
             'total_available' => 0,
             'total_issues' => 0,
             'critical_count' => 0,
             'warning_count' => 0,
             'notice_count' => 0,
+            'top_issues' => [],
         ];
+        $issueCodes = [];
 
         foreach ($sections as $section) {
             $summary['total_entities'] += (int) ($section['total_entities'] ?? 0);
@@ -377,10 +553,23 @@ class Analyzer
             $summary['critical_count'] += (int) ($section['critical_count'] ?? 0);
             $summary['warning_count'] += (int) ($section['warning_count'] ?? 0);
             $summary['notice_count'] += (int) ($section['notice_count'] ?? 0);
+            $summary['ai_fixable_items'] += (int) ($section['ai_fixable_items'] ?? 0);
             if (($section['has_next_batch'] ?? false) === true) {
                 $summary['has_next_batch'] = true;
             }
+            foreach (($section['issue_codes'] ?? []) as $code => $count) {
+                $issueCodes[$code] = ($issueCodes[$code] ?? 0) + (int) $count;
+            }
         }
+
+        arsort($issueCodes);
+        $summary['top_issues'] = array_slice($issueCodes, 0, 5, true);
+        $summary['health_score'] = $this->calculateScore(
+            $summary['total_entities'],
+            $summary['critical_count'],
+            $summary['warning_count'],
+            $summary['notice_count']
+        );
 
         return ['summary' => $summary, 'sections' => $sections];
     }
@@ -392,24 +581,123 @@ class Analyzer
             'total_entities' => count($items),
             'total_available' => $totalAvailable,
             'has_next_batch' => count($items) > 0 && ($offset + count($items)) < $totalAvailable,
+            'health_score' => 100,
+            'ai_fixable_items' => 0,
             'total_issues' => 0,
             'critical_count' => 0,
             'warning_count' => 0,
             'notice_count' => 0,
+            'issue_codes' => [],
             'items' => $items,
         ];
 
-        foreach ($items as $item) {
+        foreach ($section['items'] as &$item) {
+            $item['health_score'] = $this->calculateItemScore($item['issues'] ?? []);
+            $item['ai_fixable'] = $this->hasAiFixableIssue($item['issues'] ?? []);
+            $item['priority'] = $this->getItemPriority($item['issues'] ?? []);
+            $item['next_action'] = $this->getItemNextAction($item['issues'] ?? []);
+            if ($item['ai_fixable']) {
+                $section['ai_fixable_items']++;
+            }
             foreach (($item['issues'] ?? []) as $issue) {
                 $section['total_issues']++;
                 $key = (string) ($issue['severity'] ?? self::SEVERITY_NOTICE) . '_count';
                 if (isset($section[$key])) {
                     $section[$key]++;
                 }
+                $code = (string) ($issue['code'] ?? 'issue');
+                $section['issue_codes'][$code] = ($section['issue_codes'][$code] ?? 0) + 1;
+            }
+        }
+        unset($item);
+        arsort($section['issue_codes']);
+        $section['health_score'] = $this->calculateScore(
+            $section['total_entities'],
+            $section['critical_count'],
+            $section['warning_count'],
+            $section['notice_count']
+        );
+
+        return $section;
+    }
+
+    private function calculateScore(int $entities, int $critical, int $warning, int $notice): int
+    {
+        if ($entities <= 0) {
+            return 100;
+        }
+
+        $penalty = ($critical * 18) + ($warning * 8) + ($notice * 3);
+        return max(0, min(100, 100 - (int) round($penalty / $entities)));
+    }
+
+    private function calculateItemScore(array $issues): int
+    {
+        $critical = 0;
+        $warning = 0;
+        $notice = 0;
+
+        foreach ($issues as $issue) {
+            $severity = (string) ($issue['severity'] ?? self::SEVERITY_NOTICE);
+            if ($severity === self::SEVERITY_CRITICAL) {
+                $critical++;
+            } elseif ($severity === self::SEVERITY_WARNING) {
+                $warning++;
+            } else {
+                $notice++;
             }
         }
 
-        return $section;
+        return max(0, min(100, 100 - ($critical * 28) - ($warning * 13) - ($notice * 5)));
+    }
+
+    private function hasAiFixableIssue(array $issues): bool
+    {
+        foreach ($issues as $issue) {
+            if (!empty($issue['ai_fixable'])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function getItemPriority(array $issues): string
+    {
+        foreach ($issues as $issue) {
+            if (($issue['severity'] ?? '') === self::SEVERITY_CRITICAL) {
+                return 'fix_now';
+            }
+        }
+        foreach ($issues as $issue) {
+            if (($issue['severity'] ?? '') === self::SEVERITY_WARNING) {
+                return 'review';
+            }
+        }
+
+        return $issues ? 'monitor' : 'ok';
+    }
+
+    private function getItemNextAction(array $issues): string
+    {
+        if (!$issues) {
+            return 'No action needed.';
+        }
+        if ($this->hasAiFixableIssue($issues)) {
+            return 'Generate improved SEO content with ContentAI, then review URL rewrite notes.';
+        }
+
+        foreach ($issues as $issue) {
+            $code = (string) ($issue['code'] ?? '');
+            if (in_array($code, ['duplicate_request_path', 'empty_request_path', 'empty_target_path', 'self_target'], true)) {
+                return 'Review URL rewrite records before changing generated content.';
+            }
+            if (in_array($code, ['missing_active_rewrite', 'multiple_active_rewrites', 'inactive_entity_direct_rewrite'], true)) {
+                return 'Regenerate, remove, or redirect URL rewrites for this entity.';
+            }
+        }
+
+        return 'Review and decide whether the recommendation is still relevant.';
     }
 
     private function getPageFromOffset(int $limit, int $offset): int
@@ -434,6 +722,7 @@ class Analyzer
             'code' => $code,
             'message' => $message,
             'recommendation' => $recommendation,
+            'ai_fixable' => isset(self::AI_FIXABLE_CODES[$code]),
         ];
     }
 }

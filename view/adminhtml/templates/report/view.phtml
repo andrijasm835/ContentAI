@@ -5,7 +5,6 @@ $fields = $block->getExpectedFieldRows();
 $productUrl = $block->getProductEditUrl();
 $categoryUrl = $block->getCategoryEditUrl();
 $entityUrl = $categoryUrl ?: $productUrl;
-$usageRows = $block->getUsageRows();
 ?>
 <?php if ($report): ?>
 <style>
@@ -15,10 +14,6 @@ $usageRows = $block->getUsageRows();
     .contentai-report-summary-item { background: #fff; border: 1px solid #d6d6d6; border-left: 4px solid #eb5202; padding: 14px 16px; }
     .contentai-report-summary-label { color: #666; display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; text-transform: uppercase; }
     .contentai-report-summary-item strong { color: #303030; display: block; font-size: 15px; overflow-wrap: anywhere; }
-    .contentai-report-usage { background: #fff; border: 1px solid #d6d6d6; display: grid; gap: 0; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin: -8px 0 22px; }
-    .contentai-report-usage-item { border-right: 1px solid #e5e5e5; padding: 12px 14px; }
-    .contentai-report-usage-label { color: #666; display: block; font-size: 11px; font-weight: 700; margin-bottom: 5px; text-transform: uppercase; }
-    .contentai-report-usage-value { font-weight: 600; overflow-wrap: anywhere; }
     .contentai-report-panel { background: #fff; border: 1px solid #d6d6d6; }
     .contentai-report-panel-title { background: #514943; color: #fff; font-weight: 600; padding: 13px 16px; }
     .contentai-report-row { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 58px; }
@@ -57,7 +52,7 @@ $usageRows = $block->getUsageRows();
 
     <section class="contentai-report-summary">
         <div class="contentai-report-summary-item">
-            <span class="contentai-report-summary-label"><?= $block->escapeHtml(__('Report ID')) ?></span>
+            <span class="contentai-report-summary-label"><?= $block->escapeHtml(__('History ID')) ?></span>
             <strong><?= (int) $report->getId() ?></strong>
         </div>
         <div class="contentai-report-summary-item">
@@ -73,25 +68,14 @@ $usageRows = $block->getUsageRows();
             <strong><?= $block->escapeHtml(ucfirst((string) $report->getData('generator_type'))) ?></strong>
         </div>
         <div class="contentai-report-summary-item">
-            <span class="contentai-report-summary-label"><?= $block->escapeHtml(__('Created At')) ?></span>
+            <span class="contentai-report-summary-label"><?= $block->escapeHtml(__('Created')) ?></span>
             <strong><?= $block->escapeHtml((string) $report->getData('created_at')) ?></strong>
         </div>
     </section>
 
-    <?php if ($usageRows): ?>
-        <section class="contentai-report-usage">
-            <?php foreach ($usageRows as $label => $value): ?>
-                <div class="contentai-report-usage-item">
-                    <span class="contentai-report-usage-label"><?= $block->escapeHtml(__($label)) ?></span>
-                    <span class="contentai-report-usage-value"><?= $block->escapeHtml($value) ?></span>
-                </div>
-            <?php endforeach; ?>
-        </section>
-    <?php endif; ?>
-
     <?php if ($block->isFieldReport()): ?>
         <div class="contentai-report-panel">
-            <div class="contentai-report-panel-title"><?= $block->escapeHtml(__('Generated Content')) ?></div>
+            <div class="contentai-report-panel-title"><?= $block->escapeHtml(__('Suggested Content')) ?></div>
             <?php foreach ($fields as $code => $value): ?>
                 <div class="contentai-report-row">
                     <div class="contentai-report-field"><?= $block->escapeHtml($block->getFieldLabel($code)) ?></div>
@@ -107,7 +91,7 @@ $usageRows = $block->getUsageRows();
         </div>
     <?php else: ?>
         <div class="contentai-report-raw">
-            <h2><?= $block->escapeHtml(__('Generated Content')) ?></h2>
+            <h2><?= $block->escapeHtml(__('Suggested Content')) ?></h2>
             <pre><?= $block->escapeHtml($block->getRawContent()) ?></pre>
         </div>
     <?php endif; ?>

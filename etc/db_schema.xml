@@ -38,6 +38,8 @@
         <column xsi:type="int" name="batch_offset" nullable="false" unsigned="true" default="0" comment="Batch Offset"/>
         <column xsi:type="int" name="total_available" nullable="false" unsigned="true" default="0" comment="Total Available"/>
         <column xsi:type="smallint" name="has_next_batch" nullable="false" unsigned="true" default="0" comment="Has Next Batch"/>
+        <column xsi:type="int" name="health_score" nullable="false" unsigned="true" default="100" comment="SEO Health Score"/>
+        <column xsi:type="int" name="ai_fixable_items" nullable="false" unsigned="true" default="0" comment="AI Fixable Items"/>
         <column xsi:type="int" name="total_entities" nullable="false" unsigned="true" default="0" comment="Total Entities"/>
         <column xsi:type="int" name="total_issues" nullable="false" unsigned="true" default="0" comment="Total Issues"/>
         <column xsi:type="int" name="critical_count" nullable="false" unsigned="true" default="0" comment="Critical Issues"/>

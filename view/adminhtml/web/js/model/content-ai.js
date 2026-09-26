@@ -44,10 +44,7 @@ define([
                     fields: ['image_label', 'small_image_label', 'thumbnail_label']
                 }
             },
-            fieldAliases: {
-                subtitle: 'product_subtitle',
-                features: 'tech_specs_features'
-            },
+            fieldAliases: {},
             categoryGenerationFields: [
                 'description',
                 'meta_title',
@@ -70,6 +67,51 @@ define([
         generatedFields: {},
         currentEntityType: 'product',
         modalReady: false,
+
+        configureProductFields: function (fields) {
+            if (!$.isArray(fields) || !fields.length) {
+                return;
+            }
+            var content = [];
+            var seo = [];
+            var images = [];
+            this.options.allowedGenerationFields = [];
+            this.options.fieldAliases = {};
+            this.productFieldMetadata = {};
+            fields.forEach(function (field) {
+                var code = String(field.code || '');
+                if (!code) { return; }
+                this.options.allowedGenerationFields.push(code);
+                this.productFieldMetadata[code] = field;
+                if (code.indexOf('meta_') === 0) { seo.push(code); }
+                else if (code.indexOf('_label') !== -1) { images.push(code); }
+                else { content.push(code); }
+            }, this);
+            this.options.fieldGroups = {
+                content: {label: 'Content', fields: content},
+                seo: {label: 'SEO', fields: seo},
+                images: {label: 'Images', fields: images}
+            };
+        },
+
+        configureCategoryFields: function (fields) {
+            if (!$.isArray(fields) || !fields.length) { return; }
+            var content = [];
+            var seo = [];
+            this.options.categoryGenerationFields = [];
+            this.categoryFieldMetadata = {};
+            fields.forEach(function (field) {
+                var code = String(field.code || '');
+                if (!code) { return; }
+                this.options.categoryGenerationFields.push(code);
+                this.categoryFieldMetadata[code] = field;
+                (code.indexOf('meta_') === 0 ? seo : content).push(code);
+            }, this);
+            this.options.categoryFieldGroups = {
+                content: {label: 'Content', fields: content},
+                seo: {label: 'SEO', fields: seo}
+            };
+        },
 
         initToolbarButton: function () {
             var self = this;
@@ -216,23 +258,24 @@ define([
             var labels = {
                 subtitle: 'Subtitle',
                 features: 'Features',
-                short_description: 'Short Description',
+                short_description: 'Short Product Description',
                 description: 'Description',
-                meta_title: 'Meta Title',
-                meta_keyword: 'Meta Keywords',
-                meta_keywords: 'Meta Keywords',
-                meta_description: 'Meta Description',
-                image_label: 'Base Image Label',
-                small_image_label: 'Small Image Label',
-                thumbnail_label: 'Thumbnail Label'
+                meta_title: 'SEO Page Title',
+                meta_keyword: 'SEO Keywords',
+                meta_keywords: 'SEO Keywords',
+                meta_description: 'SEO Search Description',
+                image_label: 'Main Image Alt Text',
+                small_image_label: 'Small Image Alt Text',
+                thumbnail_label: 'Thumbnail Alt Text'
             };
+            var metadata = this.productFieldMetadata && this.productFieldMetadata[code];
             var targetCode = this.getTargetFieldCode(code);
             var $targetField = $('[name="product[' + targetCode + ']"]').first();
 
             return {
                 code: code,
                 targetCode: targetCode,
-                label: labels[code] || code,
+                label: metadata && metadata.label ? metadata.label : (labels[code] || code),
                 value: this.getProductFieldCurrentValue(code) ||
                     ($targetField.length ? this.getFieldValue($targetField) : '')
             };
@@ -246,7 +289,8 @@ define([
                 fields.push({
                     code: code,
                     targetCode: code,
-                    label: self.getDefaultFieldLabel(code),
+                    label: self.categoryFieldMetadata && self.categoryFieldMetadata[code]
+                        ? self.categoryFieldMetadata[code].label : self.getDefaultFieldLabel(code),
                     value: self.getCategoryFieldCurrentValue(code)
                 });
             });
@@ -678,7 +722,7 @@ define([
             };
 
             data.store_id = {
-                label: 'Store ID',
+                label: 'Store View ID',
                 value: this.getCurrentStoreId()
             };
 
@@ -743,7 +787,7 @@ define([
                 value: this.getCategoryId()
             };
             data.store_id = {
-                label: 'Store ID',
+                label: 'Store View ID',
                 value: this.getCurrentStoreId()
             };
 
@@ -754,17 +798,18 @@ define([
             var labels = {
                 subtitle: 'Subtitle',
                 features: 'Features',
-                short_description: 'Short Description',
+                short_description: 'Short Product Description',
                 description: 'Description',
-                meta_title: 'Meta Title',
-                meta_keyword: 'Meta Keywords',
-                meta_description: 'Meta Description',
-                image_label: 'Base Image Label',
-                small_image_label: 'Small Image Label',
-                thumbnail_label: 'Thumbnail Label'
+                meta_title: 'SEO Page Title',
+                meta_keyword: 'SEO Keywords',
+                meta_description: 'SEO Search Description',
+                image_label: 'Main Image Alt Text',
+                small_image_label: 'Small Image Alt Text',
+                thumbnail_label: 'Thumbnail Alt Text'
             };
 
-            return labels[code] || code.replace(/_/g, ' ');
+            var metadata = this.productFieldMetadata && this.productFieldMetadata[code];
+            return metadata && metadata.label ? metadata.label : (labels[code] || code.replace(/_/g, ' '));
         },
 
         getCategoryFieldCode: function (name) {

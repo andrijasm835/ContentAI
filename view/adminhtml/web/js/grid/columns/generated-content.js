@@ -6,15 +6,15 @@ define([
     var labels = {
         subtitle: 'Subtitle',
         features: 'Features',
-        short_description: 'Short Description',
+        short_description: 'Short Product Description',
         description: 'Description',
-        meta_title: 'Meta Title',
-        meta_keyword: 'Meta Keywords',
-        meta_keywords: 'Meta Keywords',
-        meta_description: 'Meta Description',
-        image_label: 'Base Image Label',
-        small_image_label: 'Small Image Label',
-        thumbnail_label: 'Thumbnail Label'
+        meta_title: 'SEO Page Title',
+        meta_keyword: 'SEO Keywords',
+        meta_keywords: 'SEO Keywords',
+        meta_description: 'SEO Search Description',
+        image_label: 'Main Image Alt Text',
+        small_image_label: 'Small Image Alt Text',
+        thumbnail_label: 'Thumbnail Alt Text'
     };
 
     var order = [
@@ -52,7 +52,7 @@ define([
 
             if (!data) {
                 return [{
-                    label: 'Generated Content',
+                    label: 'Suggested Content',
                     value: this.truncate(this.normalize(value), 300)
                 }];
             }
@@ -71,7 +71,7 @@ define([
             }, this);
 
             return rows.length ? rows : [{
-                label: 'Generated Content',
+                label: 'Suggested Content',
                 value: '-'
             }];
         },
@@ -101,7 +101,7 @@ define([
             return [
                 {label: 'Products', value: String(products.length)},
                 {label: 'Pending', value: String(pending)},
-                {label: 'Applied', value: String(applied)},
+                {label: 'Saved to Catalog', value: String(applied)},
                 {label: 'SKUs', value: skus.length ? skus.slice(0, 12).join(', ') : '-'}
             ];
         },

@@ -7,6 +7,8 @@ define([
     $.widget('mage.contentAigenerateWidget', {
 
         _create: function () {
+            contentAIModel.configureProductFields(window.contentAIProductFields || []);
+            contentAIModel.configureCategoryFields(window.contentAICategoryFields || []);
             contentAIModel.initToolbarButton();
         }
     });

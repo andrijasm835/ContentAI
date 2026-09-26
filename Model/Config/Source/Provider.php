@@ -1,4 +1,5 @@
 <?php
+
 namespace Nistruct\ContentAI\Model\Config\Source;
 
 use Magento\Framework\Data\OptionSourceInterface;

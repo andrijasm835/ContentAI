@@ -230,3 +230,461 @@
 .contentai-grid-summary {
     min-width: 260px;
 }
+
+.contentai-bulk-page {
+    max-width: 980px;
+}
+
+.contentai-bulk-form {
+    background: #fff;
+    border: 1px solid #d6d6d6;
+}
+
+.contentai-bulk-header {
+    border-bottom: 1px solid #e5e5e5;
+    padding: 20px 24px;
+}
+
+.contentai-bulk-header h2,
+.contentai-bulk-step h3 {
+    margin: 0;
+}
+
+.contentai-bulk-header h2 {
+    font-size: 20px;
+}
+
+.contentai-bulk-header p {
+    color: #666;
+    margin: 6px 0 0;
+}
+
+.contentai-bulk-step {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: 34px minmax(0, 1fr);
+    padding: 24px;
+}
+
+.contentai-bulk-step + .contentai-bulk-step {
+    border-top: 1px solid #e5e5e5;
+}
+
+.contentai-bulk-step[hidden],
+.contentai-bulk-option[hidden],
+.contentai-bulk-field[hidden],
+.contentai-bulk-actions[hidden] {
+    display: none;
+}
+
+.contentai-bulk-step-number {
+    align-items: center;
+    background: #514943;
+    border-radius: 50%;
+    color: #fff;
+    display: flex;
+    font-size: 14px;
+    font-weight: 600;
+    height: 30px;
+    justify-content: center;
+    width: 30px;
+}
+
+.contentai-bulk-step h3 {
+    font-size: 17px;
+}
+
+.contentai-bulk-note {
+    color: #666;
+    font-size: 12px;
+    line-height: 1.4;
+    margin: 6px 0 14px;
+}
+
+.contentai-bulk-options,
+.contentai-bulk-checks {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.contentai-bulk-option,
+.contentai-bulk-checks label,
+.contentai-bulk-radio-list label {
+    align-items: center;
+    border: 1px solid #d6d6d6;
+    cursor: pointer;
+    display: flex;
+    gap: 9px;
+    margin: 0;
+    min-height: 42px;
+    padding: 9px 12px;
+}
+
+.contentai-bulk-option:has(input:checked),
+.contentai-bulk-checks label:has(input:checked),
+.contentai-bulk-radio-list label:has(input:checked) {
+    background: #fff8f1;
+    border-color: #eb5202;
+}
+
+.contentai-bulk-segmented {
+    display: inline-flex;
+    margin-top: 16px;
+}
+
+.contentai-bulk-segmented label {
+    margin: 0;
+}
+
+.contentai-bulk-segmented input {
+    position: absolute;
+    opacity: 0;
+}
+
+.contentai-bulk-segmented span {
+    background: #f5f5f5;
+    border: 1px solid #adadad;
+    cursor: pointer;
+    display: block;
+    font-weight: 600;
+    padding: 9px 18px;
+}
+
+.contentai-bulk-segmented label + label span {
+    border-left: 0;
+}
+
+.contentai-bulk-segmented input:checked + span {
+    background: #514943;
+    border-color: #514943;
+    color: #fff;
+}
+
+.contentai-bulk-field {
+    margin-top: 20px;
+}
+
+.contentai-bulk-field > label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.contentai-bulk-field select,
+.contentai-bulk-field textarea {
+    max-width: 640px;
+    width: 100%;
+}
+
+.contentai-bulk-field textarea {
+    min-height: 110px;
+    resize: vertical;
+}
+
+.contentai-category-picker {
+    background: #fff;
+    border: 1px solid #c8c8c8;
+    max-width: 720px;
+}
+
+.contentai-category-search {
+    background: #f7f7f7;
+    border-bottom: 1px solid #d6d6d6;
+    padding: 12px;
+}
+
+.contentai-category-search input[type='search'] {
+    background: #fff;
+    height: 40px;
+    max-width: none;
+    padding: 0 12px;
+    width: 100%;
+}
+
+.contentai-category-list {
+    max-height: 360px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.contentai-category-item {
+    align-items: center;
+    border-bottom: 1px solid #ededed;
+    cursor: pointer;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    margin: 0;
+    min-height: 54px;
+    padding: 8px 12px 8px calc(12px + var(--category-depth) * 22px);
+}
+
+.contentai-category-item:last-child {
+    border-bottom: 0;
+}
+
+.contentai-category-item:hover {
+    background: #f7f7f7;
+}
+
+.contentai-category-item:has(input:checked) {
+    background: #fff4eb;
+    box-shadow: inset 3px 0 0 #eb5202;
+}
+
+.contentai-category-copy {
+    min-width: 0;
+}
+
+.contentai-category-copy strong,
+.contentai-category-copy small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.contentai-category-copy strong {
+    color: #303030;
+    font-weight: 600;
+}
+
+.contentai-category-copy small {
+    color: #777;
+    font-size: 11px;
+    margin-top: 3px;
+}
+
+.contentai-category-count {
+    background: #eee;
+    border-radius: 10px;
+    color: #555;
+    font-size: 11px;
+    font-weight: 600;
+    min-width: 28px;
+    padding: 3px 7px;
+    text-align: center;
+}
+
+.contentai-category-empty {
+    color: #777;
+    padding: 28px 16px;
+    text-align: center;
+}
+
+.contentai-bulk-radio-list {
+    display: grid;
+    gap: 10px;
+    max-width: 640px;
+}
+
+.contentai-bulk-actions {
+    border-top: 1px solid #e5e5e5;
+    padding: 18px 24px;
+    text-align: right;
+}
+
+.contentai-bulk-running {
+    color: #666;
+    display: none;
+    margin-right: 14px;
+}
+
+.contentai-bulk-form.is-submitting .contentai-bulk-running {
+    display: inline-block;
+}
+
+@media (max-width: 640px) {
+    .contentai-bulk-step {
+        grid-template-columns: 1fr;
+    }
+}
+
+.contentai-seo-page {
+    margin: 0 auto;
+    max-width: 1040px;
+}
+
+.contentai-seo-form {
+    background: #fff;
+    border: 1px solid #d6d6d6;
+}
+
+.contentai-seo-header {
+    align-items: center;
+    border-bottom: 1px solid #e5e5e5;
+    display: flex;
+    justify-content: space-between;
+    padding: 20px 24px;
+}
+
+.contentai-seo-header h2 {
+    font-size: 20px;
+    margin: 0;
+}
+
+.contentai-seo-header p,
+.contentai-seo-step-body > p {
+    color: #666;
+    margin: 6px 0 0;
+}
+
+.contentai-seo-step {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: 34px minmax(0, 1fr);
+    padding: 24px;
+}
+
+.contentai-seo-step + .contentai-seo-step {
+    border-top: 1px solid #e5e5e5;
+}
+
+.contentai-seo-step[hidden],
+.contentai-seo-filter-panel[hidden],
+.contentai-seo-actions[hidden] {
+    display: none;
+}
+
+.contentai-seo-step-number {
+    align-items: center;
+    background: #514943;
+    border-radius: 50%;
+    color: #fff;
+    display: flex;
+    font-weight: 600;
+    height: 30px;
+    justify-content: center;
+    width: 30px;
+}
+
+.contentai-seo-step h3 {
+    font-size: 17px;
+    margin: 3px 0 0;
+}
+
+.contentai-seo-step select[data-seo-store] {
+    margin-top: 16px;
+    max-width: 560px;
+    width: 100%;
+}
+
+.contentai-seo-scope-options {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+    margin-top: 16px;
+}
+
+.contentai-seo-scope-options label,
+.contentai-seo-missing-group label {
+    align-items: center;
+    border: 1px solid #d6d6d6;
+    cursor: pointer;
+    display: flex;
+    gap: 9px;
+    margin: 0;
+    min-height: 42px;
+    padding: 9px 12px;
+}
+
+.contentai-seo-scope-options label:has(input:checked),
+.contentai-seo-missing-group label:has(input:checked) {
+    background: #fff4eb;
+    border-color: #eb5202;
+}
+
+.contentai-seo-filter-panel {
+    border: 1px solid #d6d6d6;
+    margin-top: 18px;
+    padding: 18px;
+}
+
+.contentai-seo-filter-panel h4 {
+    font-size: 16px;
+    margin: 0 0 16px;
+}
+
+.contentai-seo-filter-grid {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: minmax(280px, 1fr) minmax(260px, 1fr) 180px;
+}
+
+.contentai-seo-filter-grid-two {
+    grid-template-columns: minmax(320px, 1fr) 180px;
+}
+
+.contentai-seo-field label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 7px;
+}
+
+.contentai-seo-field select,
+.contentai-seo-field textarea {
+    max-width: none;
+    width: 100%;
+}
+
+.contentai-seo-field select[multiple],
+.contentai-seo-field textarea {
+    min-height: 150px;
+}
+
+.contentai-seo-missing-group {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(2, minmax(200px, 1fr));
+    margin-top: 16px;
+}
+
+.contentai-seo-missing-group > strong {
+    grid-column: 1 / -1;
+}
+
+.contentai-seo-batch-fields {
+    display: flex;
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.contentai-seo-batch-fields label span {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.contentai-seo-batch-fields input {
+    width: 160px;
+}
+
+.contentai-seo-actions {
+    border-top: 1px solid #e5e5e5;
+    padding: 18px 24px;
+    text-align: right;
+}
+
+.contentai-seo-running {
+    color: #666;
+    display: none;
+    margin-right: 14px;
+}
+
+.contentai-seo-form.is-submitting .contentai-seo-running {
+    display: inline-block;
+}
+
+@media (max-width: 800px) {
+    .contentai-seo-filter-grid,
+    .contentai-seo-filter-grid-two,
+    .contentai-seo-scope-options,
+    .contentai-seo-missing-group {
+        grid-template-columns: 1fr;
+    }
+
+    .contentai-seo-missing-group > strong {
+        grid-column: auto;
+    }
+}

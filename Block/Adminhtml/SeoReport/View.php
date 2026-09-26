@@ -41,12 +41,21 @@ class View extends Template
             return '';
         }
 
-        return $this->getUrl('nistruct_contentai/seo/index', [
+        $params = [
             'scope' => (string) ($summary['scope'] ?? 'all'),
             'store_id' => (int) ($summary['store_id'] ?? 0),
             'limit' => (int) ($summary['limit'] ?? 100),
             'offset' => (int) ($summary['next_offset'] ?? 0),
-        ]);
+        ];
+        $filters = is_array($summary['filters'] ?? null) ? $summary['filters'] : [];
+        foreach ($filters as $key => $value) {
+            if ($value === '' || $value === []) {
+                continue;
+            }
+            $params[$key] = $value;
+        }
+
+        return $this->getUrl('nistruct_contentai/seo/index', $params);
     }
 
     public function getReportData(): array
@@ -85,5 +94,20 @@ class View extends Template
             'warning' => 'Warning',
             'notice' => 'Notice',
         ][$severity] ?? ucwords($severity);
+    }
+
+    public function getPriorityLabel(string $priority): string
+    {
+        return [
+            'fix_now' => 'Fix Now',
+            'review' => 'Review',
+            'monitor' => 'Monitor',
+            'ok' => 'OK',
+        ][$priority] ?? ucwords(str_replace('_', ' ', $priority));
+    }
+
+    public function getIssueCodeLabel(string $code): string
+    {
+        return ucwords(str_replace('_', ' ', $code));
     }
 }

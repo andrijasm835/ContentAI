@@ -17,7 +17,7 @@ class Index extends Action
     {
         $page = $this->resultPageFactory->create();
         $page->setActiveMenu('Nistruct_ContentAI::bulk_menu');
-        $page->getConfig()->getTitle()->prepend(__('ContentAI Bulk Generator'));
+        $page->getConfig()->getTitle()->prepend(__('Generate Product Content'));
         return $page;
     }
     protected function _isAllowed()

@@ -20,7 +20,7 @@ class Index extends Action
     {
         $page = $this->resultPageFactory->create();
         $page->setActiveMenu('Nistruct_ContentAI::seo_report_menu');
-        $page->getConfig()->getTitle()->prepend(__('ContentAI SEO Reports'));
+        $page->getConfig()->getTitle()->prepend(__('SEO Check History'));
         return $page;
     }
 

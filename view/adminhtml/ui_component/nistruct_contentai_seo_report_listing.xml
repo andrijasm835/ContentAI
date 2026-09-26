@@ -45,7 +45,7 @@
             <settings>
                 <filter>textRange</filter>
                 <sorting>desc</sorting>
-                <label translate="true">Report ID</label>
+                <label translate="true">History ID</label>
             </settings>
         </column>
         <column name="scope">
@@ -57,43 +57,55 @@
         <column name="store_id">
             <settings>
                 <filter>textRange</filter>
-                <label translate="true">Store ID</label>
+                <label translate="true">Store View ID</label>
             </settings>
         </column>
         <column name="total_entities">
             <settings>
                 <filter>textRange</filter>
-                <label translate="true">Scanned</label>
+                <label translate="true">Checked</label>
             </settings>
         </column>
         <column name="total_available">
             <settings>
                 <filter>textRange</filter>
-                <label translate="true">Available</label>
+                <label translate="true">Total Found</label>
             </settings>
         </column>
         <column name="batch_offset">
             <settings>
                 <filter>textRange</filter>
-                <label translate="true">Offset</label>
+                <label translate="true">Start From</label>
             </settings>
         </column>
         <column name="batch_limit">
             <settings>
                 <filter>textRange</filter>
-                <label translate="true">Limit</label>
+                <label translate="true">Batch Size</label>
+            </settings>
+        </column>
+        <column name="health_score">
+            <settings>
+                <filter>textRange</filter>
+                <label translate="true">SEO Score</label>
+            </settings>
+        </column>
+        <column name="ai_fixable_items">
+            <settings>
+                <filter>textRange</filter>
+                <label translate="true">Can Auto-Improve</label>
             </settings>
         </column>
         <column name="total_issues">
             <settings>
                 <filter>textRange</filter>
-                <label translate="true">Issues</label>
+                <label translate="true">Problems</label>
             </settings>
         </column>
         <column name="critical_count">
             <settings>
                 <filter>textRange</filter>
-                <label translate="true">Critical</label>
+                <label translate="true">Urgent</label>
             </settings>
         </column>
         <column name="warning_count">
@@ -105,14 +117,14 @@
         <column name="notice_count">
             <settings>
                 <filter>textRange</filter>
-                <label translate="true">Notices</label>
+                <label translate="true">Notes</label>
             </settings>
         </column>
         <column name="created_at" class="Magento\Ui\Component\Listing\Columns\Date" component="Magento_Ui/js/grid/columns/date">
             <settings>
                 <filter>dateRange</filter>
                 <dataType>date</dataType>
-                <label translate="true">Created At</label>
+                <label translate="true">Created</label>
             </settings>
         </column>
         <actionsColumn name="actions" class="Nistruct\ContentAI\Ui\Component\Listing\Column\SeoReportActions">

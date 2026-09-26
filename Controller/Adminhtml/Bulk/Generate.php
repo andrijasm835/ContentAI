@@ -3,7 +3,9 @@ namespace Nistruct\ContentAI\Controller\Adminhtml\Bulk;
 
 use Magento\Backend\App\Action;
 use Magento\Catalog\Api\ProductRepositoryInterface;
+use Magento\Catalog\Model\Product\Attribute\Source\Status as ProductStatus;
 use Magento\Catalog\Model\Product;
+use Magento\Catalog\Model\ResourceModel\Category\CollectionFactory as CategoryCollectionFactory;
 use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory;
 use Magento\Framework\App\Action\HttpPostActionInterface;
 use Magento\Framework\App\Filesystem\DirectoryList;
@@ -14,39 +16,20 @@ use Nistruct\ContentAI\Helper\Data as HelperData;
 use Nistruct\ContentAI\Model\BulkReportFactory;
 use Nistruct\ContentAI\Model\Query\Completions;
 use Nistruct\ContentAI\Model\ReportStatus;
+use Nistruct\ContentAI\Model\Eav\ProductAttributeValueResolver;
+use Nistruct\ContentAI\Model\Field\ProductFieldProvider;
+use Nistruct\ContentAI\Model\Field\ProductFieldRequestValidator;
+use Nistruct\ContentAI\Model\Scope\GenerationContextResolver;
+use Nistruct\ContentAI\Model\Scope\GenerationContext;
+use Nistruct\ContentAI\Model\Prompt\EntityPromptBuilder;
 use Psr\Log\LoggerInterface;
 
 class Generate extends Action implements HttpPostActionInterface
 {
     public const ADMIN_RESOURCE = 'Nistruct_ContentAI::bulk';
 
-    private const FIELD_LABELS = [
-        'subtitle' => 'Subtitle',
-        'features' => 'Features',
-        'short_description' => 'Short Description',
-        'description' => 'Description',
-        'meta_title' => 'Meta Title',
-        'meta_keyword' => 'Meta Keywords',
-        'meta_description' => 'Meta Description',
-        'image_label' => 'Base Image Label',
-        'small_image_label' => 'Small Image Label',
-        'thumbnail_label' => 'Thumbnail Label',
-    ];
-
-    private const FIELD_TARGETS = [
-        'subtitle' => 'product_subtitle',
-        'features' => 'tech_specs_features',
-        'short_description' => 'short_description',
-        'description' => 'description',
-        'meta_title' => 'meta_title',
-        'meta_keyword' => 'meta_keyword',
-        'meta_description' => 'meta_description',
-        'image_label' => 'image_label',
-        'small_image_label' => 'small_image_label',
-        'thumbnail_label' => 'thumbnail_label',
-    ];
-
     private $collectionFactory;
+    private $categoryCollectionFactory;
     private $productRepository;
     private $completions;
     private $helper;
@@ -54,20 +37,32 @@ class Generate extends Action implements HttpPostActionInterface
     private $storeManager;
     private $directoryList;
     private $logger;
+    private ProductFieldProvider $fieldProvider;
+    private ProductFieldRequestValidator $fieldRequestValidator;
+    private ProductAttributeValueResolver $valueResolver;
+    private GenerationContextResolver $contextResolver;
+    private EntityPromptBuilder $promptBuilder;
 
     public function __construct(
         Action\Context $context,
         CollectionFactory $collectionFactory,
+        CategoryCollectionFactory $categoryCollectionFactory,
         ProductRepositoryInterface $productRepository,
         Completions $completions,
         HelperData $helper,
         BulkReportFactory $bulkReportFactory,
         StoreManagerInterface $storeManager,
         DirectoryList $directoryList,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        ProductFieldProvider $fieldProvider,
+        ProductFieldRequestValidator $fieldRequestValidator,
+        ProductAttributeValueResolver $valueResolver,
+        GenerationContextResolver $contextResolver,
+        EntityPromptBuilder $promptBuilder
     ) {
         parent::__construct($context);
         $this->collectionFactory = $collectionFactory;
+        $this->categoryCollectionFactory = $categoryCollectionFactory;
         $this->productRepository = $productRepository;
         $this->completions = $completions;
         $this->helper = $helper;
@@ -75,6 +70,11 @@ class Generate extends Action implements HttpPostActionInterface
         $this->storeManager = $storeManager;
         $this->directoryList = $directoryList;
         $this->logger = $logger;
+        $this->fieldProvider = $fieldProvider;
+        $this->fieldRequestValidator = $fieldRequestValidator;
+        $this->valueResolver = $valueResolver;
+        $this->contextResolver = $contextResolver;
+        $this->promptBuilder = $promptBuilder;
     }
 
     public function execute()
@@ -84,24 +84,125 @@ class Generate extends Action implements HttpPostActionInterface
             return $this->_redirect('*/*/index');
         }
 
-        $storeId = max(0, (int) $this->getRequest()->getParam('store_id', 0));
         $fields = $this->getRequestedFields('fields');
         if (!$fields) {
             $this->messageManager->addErrorMessage(__('Select at least one field to generate.'));
             return $this->_redirect('*/*/index');
         }
 
-        $limit = max(1, min(50, (int) $this->getRequest()->getParam('limit', 10)));
-        $collection = $this->buildProductCollection($storeId, $limit);
-        if (!$collection->getSize()) {
-            $this->messageManager->addNoticeMessage(__('No products matched the selected filters.'));
+        $targets = $this->getGenerationTargets();
+        if (!$targets) {
+            $this->messageManager->addErrorMessage(__('Select at least one store view.'));
             return $this->_redirect('*/*/index');
         }
 
-        $language = $this->helper->getLanguageByStoreId($storeId);
-        $products = [];
-        $usageMetadata = [];
-        $failed = 0;
+        $source = (string)$this->getRequest()->getParam('product_source');
+        $skus = $this->parseSkus((string)$this->getRequest()->getParam('skus', ''));
+        $categoryId = (int)$this->getRequest()->getParam('category_id', 0);
+        if (($source === 'category' && $categoryId <= 0) || ($source === 'skus' && !$skus)) {
+            $this->messageManager->addErrorMessage(__('Choose a category or enter at least one SKU.'));
+            return $this->_redirect('*/*/index');
+        }
+        if (!in_array($source, ['category', 'skus'], true)) {
+            $this->messageManager->addErrorMessage(__('Choose how products should be selected.'));
+            return $this->_redirect('*/*/index');
+        }
+        if ($source === 'category' && !$this->categorySelectionMatchesWebsites($categoryId)) {
+            $this->messageManager->addErrorMessage(
+                __('The selected category is not valid for every selected website root. Select websites that share this category tree, or use Specific SKUs.')
+            );
+            return $this->_redirect('*/*/index');
+        }
+
+        $generatedTotal = 0;
+        $failedTotal = 0;
+        $reportIds = [];
+        foreach ($targets as $target) {
+            $result = $this->generateForStore(
+                $target['store_id'],
+                $fields,
+                $source,
+                $categoryId,
+                $skus,
+                $target['website_ids'],
+                $target['source_store_id']
+            );
+            $generatedTotal += $result['generated'];
+            $failedTotal += $result['failed'];
+            if ($result['report_id']) {
+                $reportIds[] = $result['report_id'];
+            }
+        }
+
+        if (!$reportIds) {
+            $this->messageManager->addNoticeMessage(__('No products matched the selected filters in the selected store views.'));
+            return $this->_redirect('*/*/index');
+        }
+
+        if ($generatedTotal) {
+            $this->messageManager->addSuccessMessage(
+                __('Bulk generation finished with %1 generated product result(s) across %2 store view report(s).', $generatedTotal, count($reportIds))
+            );
+        } else {
+            $this->messageManager->addErrorMessage(__('No product content was generated. Check contentai.log.'));
+        }
+        if ($failedTotal) {
+            $this->messageManager->addWarningMessage(__('%1 product generation(s) failed. Check contentai.log.', $failedTotal));
+        }
+
+        return $this->_redirect('nistruct_contentai/bulkreport/index');
+    }
+
+    private function generateForStore(
+        int $storeId,
+        array $fields,
+        string $source,
+        int $categoryId,
+        array $skus,
+        array $websiteIds,
+        int $sourceStoreId
+    ): array
+    {
+        $fields = array_values(array_filter($fields, function (string $code) use ($storeId): bool {
+            $field = $this->fieldProvider->getField($code);
+            return $field && !($storeId > 0 && $field['scope'] === 'global');
+        }));
+        if (!$fields) {
+            return ['generated' => 0, 'failed' => 0, 'report_id' => null];
+        }
+        $collection = $this->buildProductCollection(
+            $storeId,
+            $fields,
+            $source,
+            $categoryId,
+            $skus,
+            $websiteIds,
+            $sourceStoreId
+        );
+        $productIds = array_values(array_unique(array_map('intval', $collection->getAllIds())));
+        if (!$productIds) {
+            return ['generated' => 0, 'failed' => 0, 'report_id' => null];
+        }
+
+        if ((string)$this->getRequest()->getParam('content_scope', 'missing') === 'missing') {
+            $productIds = array_values(array_filter($productIds, function (int $productId) use ($fields, $storeId): bool {
+                $product=$this->productRepository->getById($productId, false, $storeId, true);
+                $validFields=array_values(array_filter($fields, fn(string $code): bool => $this->fieldProvider->isFieldInAttributeSet($code, (int)$product->getAttributeSetId())));
+                if (!$validFields) { return false; }
+                foreach ($validFields as $code) {
+                    if ($this->valueResolver->isMissingOwnValue($productId, $code, $storeId)) {
+                        return true;
+                    }
+                }
+                return false;
+            }));
+        }
+        if (!$productIds) {
+            return ['generated' => 0, 'failed' => 0, 'report_id' => null];
+        }
+
+        $context = $this->contextResolver->resolve($storeId, $websiteIds, $sourceStoreId);
+        $language = $context->getLanguage();
         $fields = array_values($fields);
 
         $report = $this->bulkReportFactory->create();
@@ -110,134 +211,250 @@ class Generate extends Action implements HttpPostActionInterface
             'fields' => $fields,
             'language' => $language,
             'products' => [],
+            'context' => $context->toArray(),
         ], JSON_UNESCAPED_UNICODE));
-        $report->setData('usage_metadata', json_encode([]));
         $report->setApprovalStatus(ReportStatus::PROCESSING);
         $report->setCreatedAt(date('Y-m-d H:i:s'));
         $report->save();
 
-        foreach ($collection as $collectionProduct) {
-            try {
-                $product = $this->productRepository->getById((int) $collectionProduct->getId(), false, $storeId, true);
-                $selectedFields = $this->buildSelectedFields($product, $fields);
-                $productData = $this->buildProductData($product);
-                $imagePayload = $this->getProductImagePayload($product);
-                $prompt = $this->buildPrompt($selectedFields, $productData, $language);
-
-                $this->completions->resetUsageMetadata();
-                $decoded = $this->decodeFieldsResponse($this->completions->generateContent($prompt, $imagePayload));
-                $decoded = $this->retryWrongLanguageResponse($decoded, $prompt, $language, $imagePayload);
-                $productUsage = $this->completions->getUsageMetadata();
-                $generated = $this->filterGeneratedFields($decoded, $fields);
-
-                if (!$generated) {
-                    throw new LocalizedException(__('AI did not return valid generated fields.'));
+        $products = [];
+        $failed = 0;
+        foreach (array_chunk($productIds, $this->getAutomaticBatchSize(count($productIds))) as $batch) {
+            foreach ($batch as $productId) {
+                try {
+                    $products[] = $this->generateQueuedProduct(
+                        $productId,
+                        $fields,
+                        $context
+                    );
+                } catch (\Throwable $e) {
+                    $failed++;
+                    $products[] = [
+                        'product_id' => $productId,
+                        'sku' => '',
+                        'fields' => [],
+                        'approval_status' => ReportStatus::FAILED,
+                        'applied_fields' => [],
+                        'error' => $e->getMessage(),
+                    ];
+                    $this->logger->error('ContentAI bulk product generation failed: ' . $e->getMessage());
                 }
-
-                $usageMetadata = $this->mergeUsageMetadata($usageMetadata, $productUsage);
-                $products[] = [
-                    'product_id' => (int) $product->getId(),
-                    'sku' => (string) $product->getSku(),
-                    'fields' => $generated,
-                    'approval_status' => ReportStatus::PENDING_APPROVAL,
-                    'applied_fields' => [],
-                    'usage_metadata' => $productUsage,
-                ];
-            } catch (\Exception $e) {
-                $failed++;
-                $products[] = [
-                    'product_id' => (int) $collectionProduct->getId(),
-                    'sku' => (string) $collectionProduct->getSku(),
-                    'fields' => [],
-                    'approval_status' => 'failed',
-                    'applied_fields' => [],
-                    'error' => $e->getMessage(),
-                ];
-                $this->logger->error('ContentAI bulk generate failed: ' . $e->getMessage());
             }
-
             $report->setAiData(json_encode([
                 'fields' => $fields,
                 'language' => $language,
                 'products' => $products,
-            ], JSON_UNESCAPED_UNICODE));
-            $report->setData('usage_metadata', json_encode($usageMetadata));
-            $report->save();
+                'context' => $context->toArray(),
+            ], JSON_UNESCAPED_UNICODE))->save();
         }
 
-        $generatedCount = count(array_filter($products, function ($product) {
+        $generated = count(array_filter($products, function (array $product): bool {
             return !empty($product['fields']);
         }));
+        $report->setApprovalStatus($generated ? $this->getBatchStatus($products) : ReportStatus::FAILED)->save();
 
-        if (!$generatedCount) {
-            $report->setApprovalStatus(ReportStatus::FAILED);
-            $report->save();
-            $this->messageManager->addErrorMessage(__('No product content was generated. Check contentai.log.'));
-            return $this->_redirect('nistruct_contentai/bulkreport/view', ['id' => $report->getId()]);
-        }
-
-        $report->setAiData(json_encode([
-            'fields' => $fields,
-            'language' => $language,
-            'products' => $products,
-        ], JSON_UNESCAPED_UNICODE));
-        $report->setData('usage_metadata', json_encode($usageMetadata));
-        $report->setApprovalStatus($this->getBatchStatus($products));
-        $report->save();
-
-        $this->messageManager->addSuccessMessage(
-            __('Bulk generation finished and report #%1 was created with %2 generated product(s). Open the report to review and apply fields.', $report->getId(), $generatedCount)
-        );
-        if ($failed) {
-            $this->messageManager->addWarningMessage(__('%1 product(s) failed during generation. Check contentai.log.', $failed));
-        }
-
-        return $this->_redirect('nistruct_contentai/bulkreport/index');
+        return ['generated' => $generated, 'failed' => $failed, 'report_id' => (int)$report->getId()];
     }
 
-    private function buildProductCollection(int $storeId, int $limit)
+    public function generateQueuedProduct(
+        int $productId,
+        array $fields,
+        GenerationContext $context
+    ): array {
+        $product = $this->productRepository->getById($productId, false, $context->getTargetStoreId(), true);
+        $fields = array_values(array_filter($fields, fn(string $code): bool => $this->fieldProvider->isFieldInAttributeSet($code, (int)$product->getAttributeSetId())));
+        if (!$fields) { throw new LocalizedException(__('None of the selected fields belong to this product attribute set.')); }
+        $prompt = $this->promptBuilder->build(
+            'product',
+            $this->buildSelectedFields($product, $fields),
+            $this->buildProductData($product),
+            $context
+        );
+        $imagePayload = $this->getProductImagePayload($product, $context->getSourceStoreId());
+
+        $this->completions->resetUsageMetadata();
+        $decoded = $this->decodeFieldsResponse($this->completions->generateContent($prompt, $imagePayload));
+        $generated = $this->filterGeneratedFields($decoded, $fields);
+        if (!$generated) {
+            throw new LocalizedException(__('AI did not return valid generated fields.'));
+        }
+
+        return [
+            'product_id' => (int)$product->getId(),
+            'sku' => (string)$product->getSku(),
+            'fields' => $generated,
+            'approval_status' => ReportStatus::PENDING_APPROVAL,
+            'applied_fields' => [],
+        ];
+    }
+
+    private function buildProductCollection(
+        int $storeId,
+        array $fields,
+        string $source,
+        int $categoryId,
+        array $skus,
+        array $websiteIds,
+        int $sourceStoreId
+    )
     {
         $collection = $this->collectionFactory->create();
         $collection->setStoreId($storeId);
-        if ($storeId > 0) {
-            $collection->addStoreFilter($storeId);
+        if ($websiteIds) {
+            $collection->addWebsiteFilter($websiteIds);
         }
-        $collection->addAttributeToSelect('*')
-            ->setPageSize($limit)
-            ->setCurPage(1);
+        $collection->addAttributeToSelect('sku')
+            ->addAttributeToFilter('status', ProductStatus::STATUS_ENABLED);
 
-        $skus = $this->parseSkus((string) $this->getRequest()->getParam('skus', ''));
-        if ($skus) {
+        if ($source === 'skus') {
             $collection->addAttributeToFilter('sku', ['in' => $skus]);
-        }
-
-        $categoryId = (int) $this->getRequest()->getParam('category_id', 0);
-        if ($categoryId > 0) {
-            $collection->addCategoriesFilter(['in' => [$categoryId]]);
-        }
-
-        foreach ($this->getRequestedFields('missing_fields') as $code) {
-            $target = self::FIELD_TARGETS[$code] ?? $code;
-            $collection->addAttributeToFilter([
-                ['attribute' => $target, 'null' => true],
-                ['attribute' => $target, 'eq' => ''],
-            ], null, 'left');
+        } else {
+            $categoryIds = $this->getCategoryBranchIds($categoryId, $sourceStoreId);
+            if (!$categoryIds) {
+                $collection->addAttributeToFilter('entity_id', -1);
+            } else {
+                $collection->addCategoriesFilter(['in' => $categoryIds]);
+            }
         }
 
         return $collection;
     }
 
+    private function getCategoryBranchIds(int $categoryId, int $storeId): array
+    {
+        if ($storeId <= 0) {
+            return [];
+        }
+        $rootCategoryId = (int)$this->storeManager->getStore($storeId)->getRootCategoryId();
+        $categoryCollection = $this->categoryCollectionFactory->create();
+        $categoryCollection->setStoreId($storeId);
+        $category = $categoryCollection
+            ->addAttributeToSelect('is_active')
+            ->addAttributeToFilter('is_active', 1)
+            ->addFieldToFilter('entity_id', $categoryId)
+            ->getFirstItem();
+        $path = (string)$category->getPath();
+        $rootPath = '1/' . $rootCategoryId;
+        if ($path === '' || ($path !== $rootPath && strpos($path, $rootPath . '/') !== 0)) {
+            return [];
+        }
+
+        $branch = $this->categoryCollectionFactory->create();
+        $branch->setStoreId($storeId);
+        $branch->addAttributeToSelect('is_active')
+            ->addAttributeToFilter('is_active', 1)
+            ->addFieldToFilter('path', [
+                ['eq' => $path],
+                ['like' => $path . '/%'],
+            ]);
+
+        return array_map('intval', $branch->getAllIds());
+    }
+
     private function getRequestedFields(string $param): array
     {
-        $values = (array) $this->getRequest()->getParam($param, []);
-        $fields = [];
-        foreach ($values as $value) {
-            $value = (string) $value;
-            if (isset(self::FIELD_LABELS[$value])) {
-                $fields[] = $value;
+        return $this->fieldRequestValidator->validateCodes(
+            (array)$this->getRequest()->getParam($param, [])
+        );
+    }
+
+    private function getGenerationTargets(): array
+    {
+        $selectedWebsiteIds = array_values(array_filter(array_unique(array_map(
+            'intval',
+            (array)$this->getRequest()->getParam('website_ids', [])
+        ))));
+        $websiteLookup = array_flip($selectedWebsiteIds);
+        $storeIds = array_values(array_unique(array_map(
+            'intval',
+            (array)$this->getRequest()->getParam('store_ids', [])
+        )));
+        $targets = [];
+        foreach ($storeIds as $storeId) {
+            try {
+                if ($storeId === 0) {
+                    $sourceStoreId = $this->getDefaultStoreId($selectedWebsiteIds);
+                    if ($sourceStoreId) {
+                        $targets[] = [
+                            'store_id' => 0,
+                            'source_store_id' => $sourceStoreId,
+                            'website_ids' => $selectedWebsiteIds,
+                        ];
+                    }
+                    continue;
+                }
+                $store = $this->storeManager->getStore($storeId);
+                if (isset($websiteLookup[(int)$store->getWebsiteId()])) {
+                    $targets[] = [
+                        'store_id' => $storeId,
+                        'source_store_id' => $storeId,
+                        'website_ids' => [(int)$store->getWebsiteId()],
+                    ];
+                }
+            } catch (\Exception $e) {
+                continue;
             }
         }
-        return array_values(array_unique($fields));
+
+        return $targets;
+    }
+
+    private function getDefaultStoreId(array $websiteIds): int
+    {
+        foreach ($websiteIds as $websiteId) {
+            try {
+                $store = $this->storeManager->getWebsite($websiteId)->getDefaultStore();
+                if ($store) {
+                    return (int)$store->getId();
+                }
+            } catch (\Exception $e) {
+                continue;
+            }
+        }
+
+        return 0;
+    }
+
+    private function categorySelectionMatchesWebsites(int $categoryId): bool
+    {
+        $websiteIds = array_values(array_filter(array_unique(array_map(
+            'intval',
+            (array)$this->getRequest()->getParam('website_ids', [])
+        ))));
+        $rootIds = [];
+        foreach ($websiteIds as $websiteId) {
+            try {
+                $rootIds[] = (int)$this->storeManager->getWebsite($websiteId)->getDefaultStore()->getRootCategoryId();
+            } catch (\Exception $e) {
+                return false;
+            }
+        }
+        $rootIds = array_values(array_unique($rootIds));
+        if (count($rootIds) !== 1) {
+            return false;
+        }
+        $category = $this->categoryCollectionFactory->create()
+            ->addAttributeToSelect('path')
+            ->addFieldToFilter('entity_id', $categoryId)
+            ->getFirstItem();
+        $rootPath = '1/' . $rootIds[0];
+        $path = (string)$category->getPath();
+        return $path === $rootPath || strpos($path, $rootPath . '/') === 0;
+    }
+
+    private function getAutomaticBatchSize(int $productCount): int
+    {
+        if ($productCount <= 10) {
+            return max(1, $productCount);
+        }
+        if ($productCount <= 50) {
+            return 10;
+        }
+        if ($productCount <= 200) {
+            return 20;
+        }
+
+        return 25;
     }
 
     private function parseSkus(string $value): array
@@ -250,11 +467,12 @@ class Generate extends Action implements HttpPostActionInterface
     {
         $selectedFields = [];
         foreach ($fields as $code) {
-            $target = self::FIELD_TARGETS[$code] ?? $code;
+            $field = $this->fieldProvider->getField($code);
             $selectedFields[] = [
                 'code' => $code,
-                'label' => self::FIELD_LABELS[$code] ?? $code,
-                'value' => (string) $product->getData($target),
+                'label' => $field['label'] ?? $code,
+                'value' => (string) $product->getData($code),
+                'allows_html' => !empty($field['allows_html']),
             ];
         }
         return $selectedFields;
@@ -299,64 +517,15 @@ class Generate extends Action implements HttpPostActionInterface
         return $value;
     }
 
-    private function buildPrompt(array $selectedFields, array $productData, string $language): string
-    {
-        $lines = [
-            'Generate improved Magento product field values for the selected output fields.',
-            'The target language is determined only by the Magento store view/scope, not by the language of existing product data.',
-            'Target language: ' . $language . '.',
-            'All generated field values must be written strictly in the target language.',
-            'Use current product data only as factual source material. Do not use it as the language, tone, or final wording authority.',
-            'If current product data is in a different language, extract the facts and write fresh improved content in the target language. Do not produce a literal translation and do not return the same text unchanged.',
-            'Keep only brand names, SKU values, model names, product codes, and established product names unchanged.',
-            'When the target language is English, return English wording only; do not return Serbian, Croatian, or Bosnian words unless they are part of a brand/product/model name.',
-            'For Serbian use Serbian Latin wording, not Croatian or Bosnian wording.',
-            'For Croatian/Bosnian use Croatian/Bosnian Latin wording.',
-            'Return only a valid JSON object. Do not include markdown, comments, explanations, or code fences.',
-            'The JSON object keys must be exactly the selected output field codes.',
-            'Do not return fields that were not selected as output fields.',
-            'Do not invent specifications, certifications, dimensions, prices, stock, or claims that are not present in the product data.',
-            'Use clean HTML only for rich text description-like fields. Use plain text for titles, names, meta fields, URL keys, and short scalar fields.',
-            'For meta_title keep it concise. For meta_description keep it suitable for search snippets.',
-            'For meta_keyword return comma-separated keywords in the target language, except brand names, SKU values, and established product names.',
-            'For image label fields return concise plain text describing the product image for accessibility and image context.',
-            'If an image is provided as part of the message, use it as visual context for product appearance, shape, style, color, and visible product features.',
-            '',
-            'Selected fields:',
-        ];
-
-        foreach ($selectedFields as $field) {
-            $lines[] = sprintf(
-                '- %s (%s), current value: %s',
-                (string) $field['label'],
-                (string) $field['code'],
-                $this->normalizePromptValue((string) $field['value'])
-            );
-        }
-
-        $lines[] = '';
-        $lines[] = 'Current product data:';
-        foreach ($productData as $code => $field) {
-            $lines[] = sprintf(
-                '- %s (%s): %s',
-                (string) $field['label'],
-                (string) $code,
-                $this->normalizePromptValue((string) $field['value'])
-            );
-        }
-
-        $lines[] = '';
-        $lines[] = 'Return format example: {"name":"New product name","meta_title":"New meta title"}';
-
-        return implode("\n", $lines);
-    }
-
     private function filterGeneratedFields(array $fields, array $allowedFields): array
     {
         $allowed = array_flip($allowedFields);
         $generated = [];
         foreach ($fields as $code => $value) {
-            $code = $this->normalizeFieldCode((string) $code);
+            $code = (string) $code;
+            if (!isset($allowed[$code])) {
+                $code = $this->normalizeFieldCode($code);
+            }
             if (isset($allowed[$code]) && is_scalar($value)) {
                 $generated[$code] = $this->helper->sanitizeHtml((string) $value);
             }
@@ -389,42 +558,12 @@ class Generate extends Action implements HttpPostActionInterface
         $aliases = [
             'meta_keywords' => 'meta_keyword',
             'keywords' => 'meta_keyword',
-            'feature' => 'features',
-            'technical_features' => 'features',
-            'product_subtitle' => 'subtitle',
-            'tech_specs_features' => 'features',
         ];
 
         return $aliases[$code] ?? $code;
     }
 
-    private function retryWrongLanguageResponse(array $fields, string $prompt, string $language, string $imagePayload): array
-    {
-        if (stripos($language, 'english') === false || !$this->looksLikeSerbianCroatianBosnian($fields)) {
-            return $fields;
-        }
-
-        $this->logger->warning('ContentAI detected non-English generated response for English target language. Retrying once.');
-        try {
-            return $this->decodeFieldsResponse($this->completions->generateContent(
-                $prompt . "\n\nRegenerate in English only. Do not copy Serbian, Croatian, or Bosnian wording.",
-                $imagePayload
-            ));
-        } catch (\Exception $e) {
-            return $fields;
-        }
-    }
-
-    private function looksLikeSerbianCroatianBosnian(array $fields): bool
-    {
-        $text = mb_strtolower(implode(' ', array_map('strval', $fields)));
-        if (preg_match('/[čćšđž]/iu', $text)) {
-            return true;
-        }
-        return (bool) preg_match('/\b(sustav|proizvod|proizvoda|kutij|niskoklizn|folij|podlog|pričvrš|ucvr|učvr|ovjes|pakiranj|iskustvo otvaranja)\b/iu', $text);
-    }
-
-    private function getProductImagePayload(Product $product): string
+    private function getProductImagePayload(Product $product, int $sourceStoreId): string
     {
         $image = trim((string) $product->getData('image'));
         if ($image === '' || $image === 'no_selection') {
@@ -444,15 +583,8 @@ class Generate extends Action implements HttpPostActionInterface
             return 'data:' . ($mime ?: 'image/jpeg') . ';base64,' . base64_encode((string) file_get_contents($path));
         }
 
-        return $this->storeManager->getStore((int) $this->getRequest()->getParam('store_id', 0))
+        return $this->storeManager->getStore($sourceStoreId)
             ->getBaseUrl(UrlInterface::URL_TYPE_MEDIA) . 'catalog/product/' . $relativePath;
-    }
-
-    private function normalizePromptValue(string $value): string
-    {
-        $value = trim(strip_tags($value));
-        $value = preg_replace('/\s+/', ' ', $value);
-        return strlen($value) > 1000 ? substr($value, 0, 1000) . '...' : $value;
     }
 
     private function shouldIncludePromptField(string $code, string $label, string $value): bool
@@ -495,26 +627,6 @@ class Generate extends Action implements HttpPostActionInterface
             return false;
         }
         return true;
-    }
-
-    private function mergeUsageMetadata(array $current, array $new): array
-    {
-        if (!$new) {
-            return $current;
-        }
-        if (!$current) {
-            return $new;
-        }
-
-        return [
-            'provider' => (string) ($current['provider'] ?? $new['provider'] ?? ''),
-            'model' => (string) ($current['model'] ?? $new['model'] ?? ''),
-            'input_tokens' => (int) ($current['input_tokens'] ?? 0) + (int) ($new['input_tokens'] ?? 0),
-            'output_tokens' => (int) ($current['output_tokens'] ?? 0) + (int) ($new['output_tokens'] ?? 0),
-            'total_tokens' => (int) ($current['total_tokens'] ?? 0) + (int) ($new['total_tokens'] ?? 0),
-            'estimated_cost' => (float) ($current['estimated_cost'] ?? 0) + (float) ($new['estimated_cost'] ?? 0),
-            'currency' => (string) ($current['currency'] ?? $new['currency'] ?? 'USD'),
-        ];
     }
 
     private function getBatchStatus(array $products): string
