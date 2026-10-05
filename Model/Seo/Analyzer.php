@@ -16,6 +16,7 @@ class Analyzer
     private const SEVERITY_NOTICE = 'notice';
     private const STATUS_NO_MATCHES = 'no_matches';
     private const STATUS_NO_ISSUES = 'no_issues';
+    private const SUPPORTED_EAV_BACKEND_TYPES = ['varchar', 'text', 'int', 'decimal', 'datetime'];
 
     private ProductCollectionFactory $productCollectionFactory;
     private CategoryCollectionFactory $categoryCollectionFactory;
@@ -95,8 +96,8 @@ class Analyzer
             'meta_keyword' => 'meta_keyword',
             'url_key' => 'url_key',
         ]);
-        $duplicateMetaTitles = $this->getDuplicateEavValueCounts($collection, 'meta_title', 'catalog_product', 'catalog_product_entity_varchar', 'entity_id', $storeId);
-        $duplicateMetaDescriptions = $this->getDuplicateEavValueCounts($collection, 'meta_description', 'catalog_product', 'catalog_product_entity_varchar', 'entity_id', $storeId);
+        $duplicateMetaTitles = $this->getDuplicateEavValueCounts($collection, 'meta_title', 'catalog_product', 'catalog_product_entity', 'entity_id', $storeId);
+        $duplicateMetaDescriptions = $this->getDuplicateEavValueCounts($collection, 'meta_description', 'catalog_product', 'catalog_product_entity', 'entity_id', $storeId);
         $collection->setPageSize($limit)
             ->setCurPage($this->getPageFromOffset($limit, $offset));
 
@@ -156,8 +157,8 @@ class Analyzer
             'meta_keywords' => 'meta_keywords',
             'url_key' => 'url_key',
         ]);
-        $duplicateMetaTitles = $this->getDuplicateEavValueCounts($collection, 'meta_title', 'catalog_category', 'catalog_category_entity_varchar', 'entity_id', $storeId);
-        $duplicateMetaDescriptions = $this->getDuplicateEavValueCounts($collection, 'meta_description', 'catalog_category', 'catalog_category_entity_varchar', 'entity_id', $storeId);
+        $duplicateMetaTitles = $this->getDuplicateEavValueCounts($collection, 'meta_title', 'catalog_category', 'catalog_category_entity', 'entity_id', $storeId);
+        $duplicateMetaDescriptions = $this->getDuplicateEavValueCounts($collection, 'meta_description', 'catalog_category', 'catalog_category_entity', 'entity_id', $storeId);
         $collection->setPageSize($limit)
             ->setCurPage($this->getPageFromOffset($limit, $offset));
 
@@ -493,36 +494,48 @@ class Analyzer
         );
     }
 
-    private function getDuplicateEavValueCounts($collection, string $attributeCode, string $entityTypeCode, string $valueTable, string $idField, int $storeId): array
+    private function getDuplicateEavValueCounts($collection, string $attributeCode, string $entityTypeCode, string $entityTableBase, string $idField, int $storeId): array
     {
-        $attributeId = $this->getAttributeId($entityTypeCode, $attributeCode);
-        if ($attributeId <= 0) {
+        $metadata = $this->getAttributeMetadata($entityTypeCode, $attributeCode);
+        $valueTable = $this->getEavValueTableName($entityTableBase, (string) ($metadata['backend_type'] ?? ''));
+        if ((int) ($metadata['attribute_id'] ?? 0) <= 0 || $valueTable === '') {
             return [];
         }
 
         return $this->duplicateValueAggregator->getEavDuplicateValueCounts(
             $this->resourceConnection->getConnection(),
             $collection->getSelect(),
-            $this->resourceConnection->getTableName($valueTable),
-            $attributeId,
+            $valueTable,
+            (int) $metadata['attribute_id'],
             $storeId,
             $idField
         );
     }
 
-    private function getAttributeId(string $entityTypeCode, string $attributeCode): int
+    private function getAttributeMetadata(string $entityTypeCode, string $attributeCode): array
     {
         $connection = $this->resourceConnection->getConnection();
         $attributeTable = $this->resourceConnection->getTableName('eav_attribute');
         $entityTypeTable = $this->resourceConnection->getTableName('eav_entity_type');
         $select = $connection->select()
-            ->from(['a' => $attributeTable], ['attribute_id'])
+            ->from(['a' => $attributeTable], ['attribute_id', 'backend_type'])
             ->join(['t' => $entityTypeTable], 'a.entity_type_id = t.entity_type_id', [])
             ->where('t.entity_type_code = ?', $entityTypeCode)
             ->where('a.attribute_code = ?', $attributeCode)
             ->limit(1);
 
-        return (int) $connection->fetchOne($select);
+        $metadata = $connection->fetchRow($select);
+        return is_array($metadata) ? $metadata : [];
+    }
+
+    private function getEavValueTableName(string $entityTableBase, string $backendType): string
+    {
+        $backendType = strtolower(trim($backendType));
+        if (!in_array($backendType, self::SUPPORTED_EAV_BACKEND_TYPES, true)) {
+            return '';
+        }
+
+        return $this->resourceConnection->getTableName($entityTableBase . '_' . $backendType);
     }
 
     private function appendDuplicateValueIssue(array &$issues, string $value, array $duplicateCounts, string $code, string $message, string $entityLabel): void
