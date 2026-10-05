@@ -23,6 +23,7 @@ class Analyzer
     private ResourceConnection $resourceConnection;
     private StoreManagerInterface $storeManager;
     private AuditMetrics $auditMetrics;
+    private DuplicateValueAggregator $duplicateValueAggregator;
 
     public function __construct(
         ProductCollectionFactory $productCollectionFactory,
@@ -30,7 +31,8 @@ class Analyzer
         PageCollectionFactory $pageCollectionFactory,
         ResourceConnection $resourceConnection,
         StoreManagerInterface $storeManager,
-        ?AuditMetrics $auditMetrics = null
+        ?AuditMetrics $auditMetrics = null,
+        ?DuplicateValueAggregator $duplicateValueAggregator = null
     ) {
         $this->productCollectionFactory = $productCollectionFactory;
         $this->categoryCollectionFactory = $categoryCollectionFactory;
@@ -38,6 +40,7 @@ class Analyzer
         $this->resourceConnection = $resourceConnection;
         $this->storeManager = $storeManager;
         $this->auditMetrics = $auditMetrics ?: new AuditMetrics();
+        $this->duplicateValueAggregator = $duplicateValueAggregator ?: new DuplicateValueAggregator();
     }
 
     public function analyze(string $scope, int $storeId, int $limit, int $offset = 0, array $filters = []): array
@@ -92,8 +95,8 @@ class Analyzer
             'meta_keyword' => 'meta_keyword',
             'url_key' => 'url_key',
         ]);
-        $duplicateMetaTitles = $this->getDuplicateValueCounts($collection, 'meta_title');
-        $duplicateMetaDescriptions = $this->getDuplicateValueCounts($collection, 'meta_description');
+        $duplicateMetaTitles = $this->getDuplicateEavValueCounts($collection, 'meta_title', 'catalog_product', 'catalog_product_entity_varchar', 'entity_id', $storeId);
+        $duplicateMetaDescriptions = $this->getDuplicateEavValueCounts($collection, 'meta_description', 'catalog_product', 'catalog_product_entity_varchar', 'entity_id', $storeId);
         $collection->setPageSize($limit)
             ->setCurPage($this->getPageFromOffset($limit, $offset));
 
@@ -153,8 +156,8 @@ class Analyzer
             'meta_keywords' => 'meta_keywords',
             'url_key' => 'url_key',
         ]);
-        $duplicateMetaTitles = $this->getDuplicateValueCounts($collection, 'meta_title');
-        $duplicateMetaDescriptions = $this->getDuplicateValueCounts($collection, 'meta_description');
+        $duplicateMetaTitles = $this->getDuplicateEavValueCounts($collection, 'meta_title', 'catalog_category', 'catalog_category_entity_varchar', 'entity_id', $storeId);
+        $duplicateMetaDescriptions = $this->getDuplicateEavValueCounts($collection, 'meta_description', 'catalog_category', 'catalog_category_entity_varchar', 'entity_id', $storeId);
         $collection->setPageSize($limit)
             ->setCurPage($this->getPageFromOffset($limit, $offset));
 
@@ -212,8 +215,8 @@ class Analyzer
             'identifier' => 'identifier',
         ]);
         $collection->setOrder('page_id', 'ASC');
-        $duplicateMetaTitles = $this->getDuplicateValueCounts($collection, 'meta_title');
-        $duplicateMetaDescriptions = $this->getDuplicateValueCounts($collection, 'meta_description');
+        $duplicateMetaTitles = $this->getDuplicateFlatValueCounts($collection, 'meta_title', 'page_id');
+        $duplicateMetaDescriptions = $this->getDuplicateFlatValueCounts($collection, 'meta_description', 'page_id');
         $collection->setPageSize($limit)
             ->setCurPage($this->getPageFromOffset($limit, $offset));
 
@@ -480,17 +483,46 @@ class Analyzer
         return $issues;
     }
 
-    private function getDuplicateValueCounts($collection, string $field): array
+    private function getDuplicateFlatValueCounts($collection, string $field, string $idField): array
     {
-        $select = clone $collection->getSelect();
-        $select->reset(\Zend_Db_Select::ORDER)
-            ->reset(\Zend_Db_Select::LIMIT_COUNT)
-            ->reset(\Zend_Db_Select::LIMIT_OFFSET);
-
-        return $this->auditMetrics->getDuplicateValueCounts(
-            $this->resourceConnection->getConnection()->fetchAll($select),
-            $field
+        return $this->duplicateValueAggregator->getFlatDuplicateValueCounts(
+            $this->resourceConnection->getConnection(),
+            $collection->getSelect(),
+            $field,
+            $idField
         );
+    }
+
+    private function getDuplicateEavValueCounts($collection, string $attributeCode, string $entityTypeCode, string $valueTable, string $idField, int $storeId): array
+    {
+        $attributeId = $this->getAttributeId($entityTypeCode, $attributeCode);
+        if ($attributeId <= 0) {
+            return [];
+        }
+
+        return $this->duplicateValueAggregator->getEavDuplicateValueCounts(
+            $this->resourceConnection->getConnection(),
+            $collection->getSelect(),
+            $this->resourceConnection->getTableName($valueTable),
+            $attributeId,
+            $storeId,
+            $idField
+        );
+    }
+
+    private function getAttributeId(string $entityTypeCode, string $attributeCode): int
+    {
+        $connection = $this->resourceConnection->getConnection();
+        $attributeTable = $this->resourceConnection->getTableName('eav_attribute');
+        $entityTypeTable = $this->resourceConnection->getTableName('eav_entity_type');
+        $select = $connection->select()
+            ->from(['a' => $attributeTable], ['attribute_id'])
+            ->join(['t' => $entityTypeTable], 'a.entity_type_id = t.entity_type_id', [])
+            ->where('t.entity_type_code = ?', $entityTypeCode)
+            ->where('a.attribute_code = ?', $attributeCode)
+            ->limit(1);
+
+        return (int) $connection->fetchOne($select);
     }
 
     private function appendDuplicateValueIssue(array &$issues, string $value, array $duplicateCounts, string $code, string $message, string $entityLabel): void

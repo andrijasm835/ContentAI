@@ -230,22 +230,6 @@ class AuditMetrics
         return $issues;
     }
 
-    public function getDuplicateValueCounts(array $rows, string $field): array
-    {
-        $counts = [];
-        foreach ($rows as $row) {
-            $value = mb_strtolower(trim(strip_tags((string) ($row[$field] ?? ''))));
-            if ($value === '') {
-                continue;
-            }
-            $counts[$value] = ($counts[$value] ?? 0) + 1;
-        }
-
-        return array_filter($counts, static function (int $count): bool {
-            return $count > 1;
-        });
-    }
-
     private function getIssueScoreWeight(string $severity, string $code): int
     {
         if (array_key_exists($code, self::SCORE_WEIGHTS)) {

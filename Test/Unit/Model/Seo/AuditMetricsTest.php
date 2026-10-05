@@ -22,18 +22,6 @@ class AuditMetricsTest extends TestCase
         self::assertSame(100, $this->metrics->calculateScore(3, []));
     }
 
-    public function testCrossBatchDuplicateValueCounts(): void
-    {
-        $rows = [
-            ['meta_title' => 'Shared Title'],
-            ['meta_title' => 'Unique Title'],
-            ['meta_title' => 'shared title'],
-            ['meta_title' => '  Shared Title  '],
-        ];
-
-        self::assertSame(['shared title' => 3], $this->metrics->getDuplicateValueCounts($rows, 'meta_title'));
-    }
-
     public function testNextActionCategoryCombinations(): void
     {
         $content = [$this->metrics->issue(AuditMetrics::SEVERITY_CRITICAL, 'missing_meta_title', '', '')];
