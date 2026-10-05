@@ -68,6 +68,7 @@ $sections = $block->getSections();
     .contentai-seo-rewrite-value { overflow-wrap: anywhere; }
     .contentai-seo-rewrite-summary { color: #514943; font-weight: 700; margin-top: 12px; }
     .contentai-seo-passed { background: #f4fbf4; border-top: 1px solid #d6d6d6; color: #2f6410; font-weight: 700; padding: 12px 16px; }
+    .contentai-seo-info-note { background: #f7f7f7; border-top: 1px solid #d6d6d6; color: #514943; padding: 10px 16px; }
     .contentai-seo-section-empty, .contentai-seo-empty { background: #fff; border: 1px solid #d6d6d6; padding: 18px; }
     .contentai-seo-section-empty { border-width: 0; }
     .contentai-seo-section-empty strong { display: block; margin-bottom: 5px; }
@@ -160,6 +161,20 @@ $sections = $block->getSections();
             </ul>
         </section>
     <?php endif; ?>
+    <?php $informationalNotes = is_array($summary['informational_notes'] ?? null) ? $summary['informational_notes'] : []; ?>
+    <?php if ($informationalNotes): ?>
+        <section class="contentai-seo-top">
+            <div class="contentai-seo-top-title"><?= $block->escapeHtml(__('Informational Notes')) ?></div>
+            <ul class="contentai-seo-top-list">
+                <?php foreach ($informationalNotes as $code => $count): ?>
+                    <li>
+                        <strong><?= $block->escapeHtml($block->getIssueCodeLabel((string) $code)) ?></strong>
+                        <?= (int) $count ?>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+        </section>
+    <?php endif; ?>
 
     <?php if (!$sections): ?>
         <div class="contentai-seo-empty"><?= $block->escapeHtml(__('No SEO audit data found in this report.')) ?></div>
@@ -168,11 +183,16 @@ $sections = $block->getSections();
     <?php foreach ($sections as $section): ?>
         <?php $sectionTotalEntities = (int) ($section['total_entities'] ?? 0); ?>
         <?php $sectionTotalIssues = (int) ($section['total_issues'] ?? 0); ?>
+        <?php $sectionInformational = (int) ($section['informational_count'] ?? 0); ?>
         <?php $sectionStatus = (string) ($section['status'] ?? ($sectionTotalEntities === 0 ? 'no_matches' : ($sectionTotalIssues === 0 ? 'no_issues' : 'ok'))); ?>
         <?php $problematicItems = 0; ?>
+        <?php $informationalItems = 0; ?>
         <?php foreach (($section['items'] ?? []) as $countItem): ?>
-            <?php if (!empty($countItem['issues']) && is_array($countItem['issues'])): ?>
+            <?php if ((int) ($countItem['actionable_issue_count'] ?? (!empty($countItem['issues']) ? count($countItem['issues']) : 0)) > 0): ?>
                 <?php $problematicItems++; ?>
+            <?php endif; ?>
+            <?php if ((int) ($countItem['informational_issue_count'] ?? 0) > 0): ?>
+                <?php $informationalItems++; ?>
             <?php endif; ?>
         <?php endforeach; ?>
         <?php $passedItems = max(0, $sectionTotalEntities - $problematicItems); ?>
@@ -182,7 +202,7 @@ $sections = $block->getSections();
                 <span>
                     <?= $sectionTotalEntities ?> / <?= (int) ($section['total_available'] ?? 0) ?>
                     <?= $block->escapeHtml(__('scanned')) ?>,
-                    <?= $sectionTotalIssues ?> <?= $block->escapeHtml(__('issue(s)')) ?>
+                    <?= $sectionTotalIssues ?> <?= $block->escapeHtml(__('problem(s)')) ?>
                 </span>
             </div>
             <?php if ($sectionStatus === 'no_matches'): ?>
@@ -198,6 +218,7 @@ $sections = $block->getSections();
             <?php endif; ?>
             <?php foreach (($section['items'] ?? []) as $item): ?>
                 <?php $issues = is_array($item['issues'] ?? null) ? $item['issues'] : []; ?>
+                <?php $actionableIssueCount = (int) ($item['actionable_issue_count'] ?? count($issues)); ?>
                 <?php $rewrites = is_array($item['rewrites'] ?? null) ? $item['rewrites'] : []; ?>
                 <?php $activeRewriteCount = 0; ?>
                 <?php $redirectRewriteCount = 0; ?>
@@ -208,7 +229,7 @@ $sections = $block->getSections();
                         <?php $redirectRewriteCount++; ?>
                     <?php endif; ?>
                 <?php endforeach; ?>
-                <?php if (!$issues) { continue; } ?>
+                <?php if ($actionableIssueCount <= 0) { continue; } ?>
                 <?php $groupedIssues = $block->getGroupedIssues($issues); ?>
                 <div class="contentai-seo-item">
                     <div class="contentai-seo-item-head">
@@ -232,7 +253,7 @@ $sections = $block->getSections();
                             <?= $block->escapeHtml($block->getPriorityLabel((string) ($item['priority'] ?? 'monitor'))) ?>
                         </span>
                         <span class="contentai-seo-badge">
-                            <?= count($issues) ?> <?= $block->escapeHtml(__('issue(s)')) ?>
+                            <?= $actionableIssueCount ?> <?= $block->escapeHtml(__('problem(s)')) ?>
                         </span>
                         <?php if (!empty($item['ai_fixable'])): ?>
                             <span class="contentai-seo-badge ai"><?= $block->escapeHtml(__('ContentAI can help')) ?></span>
@@ -294,9 +315,14 @@ $sections = $block->getSections();
                     <?php endif; ?>
                 </div>
             <?php endforeach; ?>
-            <?php if ($sectionStatus === 'ok' && $passedItems > 0): ?>
+            <?php if (($sectionStatus === 'ok' || $sectionInformational > 0) && $passedItems > 0): ?>
                 <div class="contentai-seo-passed">
-                    <?= $block->escapeHtml(__('%1 additional %2 passed all checks.', $passedItems, strtolower((string) ($section['label'] ?? __('items'))))) ?>
+                    <?= $block->escapeHtml(__('%1 %2 passed SEO checks.', $passedItems, strtolower((string) ($section['label'] ?? __('items'))))) ?>
+                </div>
+            <?php endif; ?>
+            <?php if ($sectionInformational > 0): ?>
+                <div class="contentai-seo-info-note">
+                    <?= $block->escapeHtml(__('%1 of them have URL history notes.', $informationalItems)) ?>
                 </div>
             <?php endif; ?>
         </section>

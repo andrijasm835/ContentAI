@@ -41,8 +41,19 @@ class AuditMetricsTest extends TestCase
     {
         $issue = $this->metrics->issue(AuditMetrics::SEVERITY_NOTICE, 'legacy_redirects_present', '', '');
 
+        self::assertFalse($issue['actionable']);
         self::assertSame(100, $this->metrics->calculateItemScore([$issue]));
         self::assertSame(100, $this->metrics->calculateScore(1, [$issue]));
+    }
+
+    public function testOnlyLegacyRedirectsNeedNoSeoAction(): void
+    {
+        $issue = $this->metrics->issue(AuditMetrics::SEVERITY_NOTICE, 'legacy_redirects_present', '', '');
+
+        self::assertSame(0, $this->metrics->countActionableIssues([$issue]));
+        self::assertSame(1, $this->metrics->countInformationalIssues([$issue]));
+        self::assertSame('ok', $this->metrics->getItemPriority([$issue]));
+        self::assertSame('No SEO action needed.', $this->metrics->getItemNextAction([$issue]));
     }
 
     public function testAiFixableIsLimitedToContentFields(): void

@@ -573,9 +573,12 @@ class Analyzer
             'critical_count' => 0,
             'warning_count' => 0,
             'notice_count' => 0,
+            'informational_count' => 0,
             'top_issues' => [],
+            'informational_notes' => [],
         ];
         $issueCodes = [];
+        $informationalCodes = [];
         $allIssues = [];
 
         foreach ($sections as $section) {
@@ -585,12 +588,16 @@ class Analyzer
             $summary['critical_count'] += (int) ($section['critical_count'] ?? 0);
             $summary['warning_count'] += (int) ($section['warning_count'] ?? 0);
             $summary['notice_count'] += (int) ($section['notice_count'] ?? 0);
+            $summary['informational_count'] += (int) ($section['informational_count'] ?? 0);
             $summary['ai_fixable_items'] += (int) ($section['ai_fixable_items'] ?? 0);
             if (($section['has_next_batch'] ?? false) === true) {
                 $summary['has_next_batch'] = true;
             }
             foreach (($section['issue_codes'] ?? []) as $code => $count) {
                 $issueCodes[$code] = ($issueCodes[$code] ?? 0) + (int) $count;
+            }
+            foreach (($section['informational_notes'] ?? []) as $code => $count) {
+                $informationalCodes[$code] = ($informationalCodes[$code] ?? 0) + (int) $count;
             }
             foreach (($section['items'] ?? []) as $item) {
                 foreach (($item['issues'] ?? []) as $issue) {
@@ -600,7 +607,9 @@ class Analyzer
         }
 
         arsort($issueCodes);
+        arsort($informationalCodes);
         $summary['top_issues'] = array_slice($issueCodes, 0, 5, true);
+        $summary['informational_notes'] = array_slice($informationalCodes, 0, 5, true);
         $summary['health_score'] = $this->auditMetrics->calculateScore((int) $summary['total_entities'], $allIssues);
         $summary['status'] = $this->auditMetrics->getStatus((int) $summary['total_entities'], (int) $summary['total_issues']);
 
@@ -624,7 +633,9 @@ class Analyzer
             'critical_count' => 0,
             'warning_count' => 0,
             'notice_count' => 0,
+            'informational_count' => 0,
             'issue_codes' => [],
+            'informational_notes' => [],
             'items' => $items,
         ];
 
@@ -633,22 +644,31 @@ class Analyzer
             $item['ai_fixable'] = $this->auditMetrics->hasAiFixableIssue($item['issues'] ?? []);
             $item['priority'] = $this->auditMetrics->getItemPriority($item['issues'] ?? []);
             $item['next_action'] = $this->auditMetrics->getItemNextAction($item['issues'] ?? []);
+            $item['actionable_issue_count'] = $this->auditMetrics->countActionableIssues($item['issues'] ?? []);
+            $item['informational_issue_count'] = $this->auditMetrics->countInformationalIssues($item['issues'] ?? []);
             if ($item['ai_fixable']) {
                 $section['ai_fixable_items']++;
             }
             foreach (($item['issues'] ?? []) as $issue) {
+                $code = (string) ($issue['code'] ?? 'issue');
+                if (($issue['actionable'] ?? true) === false) {
+                    $section['informational_count']++;
+                    $section['informational_notes'][$code] = ($section['informational_notes'][$code] ?? 0) + 1;
+                    continue;
+                }
+
                 $section['total_issues']++;
                 $key = (string) ($issue['severity'] ?? self::SEVERITY_NOTICE) . '_count';
                 if (isset($section[$key])) {
                     $section[$key]++;
                 }
-                $code = (string) ($issue['code'] ?? 'issue');
                 $section['issue_codes'][$code] = ($section['issue_codes'][$code] ?? 0) + 1;
             }
             $item['issues'] = $this->auditMetrics->sortIssues($item['issues'] ?? []);
         }
         unset($item);
         arsort($section['issue_codes']);
+        arsort($section['informational_notes']);
         $sectionIssues = [];
         foreach (($section['items'] ?? []) as $item) {
             foreach (($item['issues'] ?? []) as $issue) {

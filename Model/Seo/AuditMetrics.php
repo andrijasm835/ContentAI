@@ -86,6 +86,9 @@ class AuditMetrics
         'short_meta_title' => 2,
         'short_meta_description' => 2,
     ];
+    private const NON_ACTIONABLE_CODES = [
+        'legacy_redirects_present' => true,
+    ];
 
     public function issue(string $severity, string $code, string $message, string $recommendation): array
     {
@@ -97,6 +100,7 @@ class AuditMetrics
             'message' => $message,
             'recommendation' => $recommendation,
             'score_weight' => $this->getIssueScoreWeight($severity, $code),
+            'actionable' => !isset(self::NON_ACTIONABLE_CODES[$code]),
             'ai_fixable' => isset(self::AI_FIXABLE_CODES[$code]),
         ];
     }
@@ -163,6 +167,7 @@ class AuditMetrics
 
     public function getItemPriority(array $issues): string
     {
+        $issues = $this->getActionableIssues($issues);
         foreach ($issues as $issue) {
             if (($issue['severity'] ?? '') === self::SEVERITY_CRITICAL) {
                 return 'fix_now';
@@ -179,8 +184,9 @@ class AuditMetrics
 
     public function getItemNextAction(array $issues): string
     {
+        $issues = $this->getActionableIssues($issues);
         if (!$issues) {
-            return 'No action needed.';
+            return 'No SEO action needed.';
         }
 
         $hasContent = $this->hasIssueCategory($issues, self::CATEGORY_CONTENT);
@@ -228,6 +234,30 @@ class AuditMetrics
         });
 
         return $issues;
+    }
+
+    public function getActionableIssues(array $issues): array
+    {
+        return array_values(array_filter($issues, static function (array $issue): bool {
+            return ($issue['actionable'] ?? true) !== false;
+        }));
+    }
+
+    public function getInformationalIssues(array $issues): array
+    {
+        return array_values(array_filter($issues, static function (array $issue): bool {
+            return ($issue['actionable'] ?? true) === false;
+        }));
+    }
+
+    public function countActionableIssues(array $issues): int
+    {
+        return count($this->getActionableIssues($issues));
+    }
+
+    public function countInformationalIssues(array $issues): int
+    {
+        return count($this->getInformationalIssues($issues));
     }
 
     private function getIssueScoreWeight(string $severity, string $code): int

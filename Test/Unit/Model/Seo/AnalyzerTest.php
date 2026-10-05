@@ -76,7 +76,61 @@ class AnalyzerTest extends TestCase
         self::assertSame('', $method->invoke($analyzer, 'catalog_product_entity', 'varchar;drop table'));
     }
 
-    private function createAnalyzerWithTableResolver(): Analyzer
+    public function testOnlyInformationalFindingsAreNotActionableProblems(): void
+    {
+        $metrics = new AuditMetrics();
+        $analyzer = $this->createAnalyzerWithTableResolver($metrics);
+        $sectionMethod = new ReflectionMethod($analyzer, 'section');
+        $sectionMethod->setAccessible(true);
+        $summaryMethod = new ReflectionMethod($analyzer, 'summarize');
+        $summaryMethod->setAccessible(true);
+
+        $section = $sectionMethod->invoke($analyzer, 'products', 'Products', [[
+            'type' => 'product',
+            'identifier' => 'SKU-1',
+            'label' => 'Product One',
+            'issues' => [$metrics->issue(AuditMetrics::SEVERITY_NOTICE, 'legacy_redirects_present', '', '')],
+        ]], 1, 0, [], 1);
+        $report = $summaryMethod->invoke($analyzer, 'products', 1, 100, 0, [], ['products' => $section]);
+
+        self::assertSame(0, $section['total_issues']);
+        self::assertSame(1, $section['informational_count']);
+        self::assertSame('no_issues', $section['status']);
+        self::assertSame('ok', $section['items'][0]['priority']);
+        self::assertSame(100, $section['items'][0]['health_score']);
+        self::assertSame('No SEO action needed.', $section['items'][0]['next_action']);
+        self::assertSame(0, $report['summary']['total_issues']);
+        self::assertSame('no_issues', $report['summary']['status']);
+        self::assertSame([], $report['summary']['top_issues']);
+        self::assertSame(['legacy_redirects_present' => 1], $report['summary']['informational_notes']);
+    }
+
+    public function testActionableAndInformationalFindingsKeepActionableProblem(): void
+    {
+        $metrics = new AuditMetrics();
+        $analyzer = $this->createAnalyzerWithTableResolver($metrics);
+        $sectionMethod = new ReflectionMethod($analyzer, 'section');
+        $sectionMethod->setAccessible(true);
+
+        $section = $sectionMethod->invoke($analyzer, 'products', 'Products', [[
+            'type' => 'product',
+            'identifier' => 'SKU-1',
+            'label' => 'Product One',
+            'issues' => [
+                $metrics->issue(AuditMetrics::SEVERITY_WARNING, 'long_meta_title', '', ''),
+                $metrics->issue(AuditMetrics::SEVERITY_NOTICE, 'legacy_redirects_present', '', ''),
+            ],
+        ]], 1, 0, [], 1);
+
+        self::assertSame(1, $section['total_issues']);
+        self::assertSame(1, $section['warning_count']);
+        self::assertSame(1, $section['informational_count']);
+        self::assertSame(['long_meta_title' => 1], $section['issue_codes']);
+        self::assertSame(['legacy_redirects_present' => 1], $section['informational_notes']);
+        self::assertSame(1, $section['items'][0]['actionable_issue_count']);
+    }
+
+    private function createAnalyzerWithTableResolver(?AuditMetrics $metrics = null): Analyzer
     {
         $resourceConnection = $this->createMock(ResourceConnection::class);
         $resourceConnection->method('getTableName')->willReturnCallback(static function (string $table): string {
@@ -89,7 +143,7 @@ class AnalyzerTest extends TestCase
             $this->createMock(PageCollectionFactory::class),
             $resourceConnection,
             $this->createMock(StoreManagerInterface::class),
-            new AuditMetrics()
+            $metrics ?: new AuditMetrics()
         );
     }
 }
