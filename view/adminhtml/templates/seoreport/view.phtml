@@ -16,6 +16,9 @@ $sections = $block->getSections();
     .contentai-seo-summary-item.medium { border-left-color: #eb5202; }
     .contentai-seo-summary-item.bad { border-left-color: #e22626; }
     .contentai-seo-summary-item.neutral { border-left-color: #8a837f; }
+    .contentai-seo-meta { background: #fff; border: 1px solid #d6d6d6; display: grid; gap: 8px 16px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin: -8px 0 20px; padding: 12px 16px; }
+    .contentai-seo-meta-item strong { color: #666; display: block; font-size: 11px; text-transform: uppercase; }
+    .contentai-seo-meta-item span { font-size: 13px; overflow-wrap: anywhere; }
     .contentai-seo-top { background: #fff; border: 1px solid #d6d6d6; margin-bottom: 20px; padding: 14px 16px; }
     .contentai-seo-top-title { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
     .contentai-seo-top-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; }
@@ -63,6 +66,8 @@ $sections = $block->getSections();
     .contentai-seo-rewrite-status.redirect { background: #1979c3; }
     .contentai-seo-rewrite-label { color: #666; display: block; font-size: 11px; font-weight: 700; margin-bottom: 3px; text-transform: uppercase; }
     .contentai-seo-rewrite-value { overflow-wrap: anywhere; }
+    .contentai-seo-rewrite-summary { color: #514943; font-weight: 700; margin-top: 12px; }
+    .contentai-seo-passed { background: #f4fbf4; border-top: 1px solid #d6d6d6; color: #2f6410; font-weight: 700; padding: 12px 16px; }
     .contentai-seo-section-empty, .contentai-seo-empty { background: #fff; border: 1px solid #d6d6d6; padding: 18px; }
     .contentai-seo-section-empty { border-width: 0; }
     .contentai-seo-section-empty strong { display: block; margin-bottom: 5px; }
@@ -98,46 +103,30 @@ $sections = $block->getSections();
             <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('SEO Score')) ?></span>
             <span class="contentai-seo-summary-value"><?= $hasScore ? $block->escapeHtml(__('%1 / 100', $score)) : $block->escapeHtml(__('N/A')) ?></span>
         </div>
-        <div class="contentai-seo-summary-item <?= $block->escapeHtmlAttr($summaryStatus === 'no_issues' ? 'good' : ($summaryStatus === 'no_matches' ? 'neutral' : '')) ?>">
-            <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('Audit State')) ?></span>
-            <span class="contentai-seo-summary-value"><?= $block->escapeHtml(__($block->getStatusLabel($summaryStatus))) ?></span>
-        </div>
-        <div class="contentai-seo-summary-item">
-            <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('History ID')) ?></span>
-            <span class="contentai-seo-summary-value"><?= (int) $report->getId() ?></span>
-        </div>
-        <div class="contentai-seo-summary-item">
-            <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('Scope')) ?></span>
-            <span class="contentai-seo-summary-value"><?= $block->escapeHtml($block->getScopeLabel((string) $report->getData('scope'))) ?></span>
-        </div>
-        <div class="contentai-seo-summary-item">
-            <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('Store View ID')) ?></span>
-            <span class="contentai-seo-summary-value"><?= (int) $report->getData('store_id') ?></span>
-        </div>
         <div class="contentai-seo-summary-item">
             <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('Checked')) ?></span>
             <span class="contentai-seo-summary-value"><?= $summaryTotalEntities ?></span>
-        </div>
-        <div class="contentai-seo-summary-item">
-            <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('Total Found')) ?></span>
-            <span class="contentai-seo-summary-value"><?= (int) ($summary['total_available'] ?? $report->getData('total_available')) ?></span>
-        </div>
-        <div class="contentai-seo-summary-item">
-            <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('Batch')) ?></span>
-            <span class="contentai-seo-summary-value"><?= (int) ($summary['offset'] ?? $report->getData('batch_offset')) ?> / <?= (int) ($summary['limit'] ?? $report->getData('batch_limit')) ?></span>
         </div>
         <div class="contentai-seo-summary-item">
             <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('Problems')) ?></span>
             <span class="contentai-seo-summary-value"><?= $summaryTotalIssues ?></span>
         </div>
         <div class="contentai-seo-summary-item">
-            <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('Can Auto-Improve')) ?></span>
-            <span class="contentai-seo-summary-value"><?= (int) ($summary['ai_fixable_items'] ?? 0) ?></span>
+            <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('Critical / Warnings')) ?></span>
+            <span class="contentai-seo-summary-value"><?= (int) $report->getData('critical_count') ?> / <?= (int) $report->getData('warning_count') ?></span>
         </div>
         <div class="contentai-seo-summary-item">
-            <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('Urgent / Warning / Notice')) ?></span>
-            <span class="contentai-seo-summary-value"><?= (int) $report->getData('critical_count') ?> / <?= (int) $report->getData('warning_count') ?> / <?= (int) $report->getData('notice_count') ?></span>
+            <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('ContentAI-Fixable')) ?></span>
+            <span class="contentai-seo-summary-value"><?= (int) ($summary['ai_fixable_items'] ?? 0) ?></span>
         </div>
+    </section>
+    <section class="contentai-seo-meta">
+        <div class="contentai-seo-meta-item"><strong><?= $block->escapeHtml(__('Audit State')) ?></strong><span><?= $block->escapeHtml(__($block->getStatusLabel($summaryStatus))) ?></span></div>
+        <div class="contentai-seo-meta-item"><strong><?= $block->escapeHtml(__('History ID')) ?></strong><span><?= (int) $report->getId() ?></span></div>
+        <div class="contentai-seo-meta-item"><strong><?= $block->escapeHtml(__('Scope')) ?></strong><span><?= $block->escapeHtml($block->getScopeLabel((string) $report->getData('scope'))) ?></span></div>
+        <div class="contentai-seo-meta-item"><strong><?= $block->escapeHtml(__('Store View')) ?></strong><span><?= (int) $report->getData('store_id') ?></span></div>
+        <div class="contentai-seo-meta-item"><strong><?= $block->escapeHtml(__('Total Found')) ?></strong><span><?= (int) ($summary['total_available'] ?? $report->getData('total_available')) ?></span></div>
+        <div class="contentai-seo-meta-item"><strong><?= $block->escapeHtml(__('Batch')) ?></strong><span><?= (int) ($summary['offset'] ?? $report->getData('batch_offset')) ?> / <?= (int) ($summary['limit'] ?? $report->getData('batch_limit')) ?></span></div>
     </section>
 
     <?php $topProblems = is_array($summary['top_issues'] ?? null) ? $summary['top_issues'] : []; ?>
@@ -180,6 +169,13 @@ $sections = $block->getSections();
         <?php $sectionTotalEntities = (int) ($section['total_entities'] ?? 0); ?>
         <?php $sectionTotalIssues = (int) ($section['total_issues'] ?? 0); ?>
         <?php $sectionStatus = (string) ($section['status'] ?? ($sectionTotalEntities === 0 ? 'no_matches' : ($sectionTotalIssues === 0 ? 'no_issues' : 'ok'))); ?>
+        <?php $problematicItems = 0; ?>
+        <?php foreach (($section['items'] ?? []) as $countItem): ?>
+            <?php if (!empty($countItem['issues']) && is_array($countItem['issues'])): ?>
+                <?php $problematicItems++; ?>
+            <?php endif; ?>
+        <?php endforeach; ?>
+        <?php $passedItems = max(0, $sectionTotalEntities - $problematicItems); ?>
         <section class="contentai-seo-section">
             <div class="contentai-seo-section-title">
                 <strong><?= $block->escapeHtml((string) ($section['label'] ?? 'Section')) ?></strong>
@@ -203,6 +199,15 @@ $sections = $block->getSections();
             <?php foreach (($section['items'] ?? []) as $item): ?>
                 <?php $issues = is_array($item['issues'] ?? null) ? $item['issues'] : []; ?>
                 <?php $rewrites = is_array($item['rewrites'] ?? null) ? $item['rewrites'] : []; ?>
+                <?php $activeRewriteCount = 0; ?>
+                <?php $redirectRewriteCount = 0; ?>
+                <?php foreach ($rewrites as $rewriteCountRow): ?>
+                    <?php if ((int) ($rewriteCountRow['redirect_type'] ?? 0) === 0): ?>
+                        <?php $activeRewriteCount++; ?>
+                    <?php else: ?>
+                        <?php $redirectRewriteCount++; ?>
+                    <?php endif; ?>
+                <?php endforeach; ?>
                 <?php if (!$issues) { continue; } ?>
                 <?php $groupedIssues = $block->getGroupedIssues($issues); ?>
                 <div class="contentai-seo-item">
@@ -260,8 +265,11 @@ $sections = $block->getSections();
                         </div>
                     <?php endforeach; ?>
                     <?php if ($rewrites): ?>
+                        <div class="contentai-seo-rewrite-summary">
+                            <?= $block->escapeHtml(__('URLs: %1 active · %2 redirects', $activeRewriteCount, $redirectRewriteCount)) ?>
+                        </div>
                         <details class="contentai-seo-issue-details">
-                            <summary><?= $block->escapeHtml(__('URL rewrite details')) ?></summary>
+                            <summary><?= $block->escapeHtml(__('View URL rewrite details')) ?></summary>
                             <div class="contentai-seo-rewrites">
                                 <?php foreach ($rewrites as $rewrite): ?>
                                     <?php $redirectType = (int) ($rewrite['redirect_type'] ?? 0); ?>
@@ -286,6 +294,11 @@ $sections = $block->getSections();
                     <?php endif; ?>
                 </div>
             <?php endforeach; ?>
+            <?php if ($sectionStatus === 'ok' && $passedItems > 0): ?>
+                <div class="contentai-seo-passed">
+                    <?= $block->escapeHtml(__('%1 additional %2 passed all checks.', $passedItems, strtolower((string) ($section['label'] ?? __('items'))))) ?>
+                </div>
+            <?php endif; ?>
         </section>
     <?php endforeach; ?>
 </div>

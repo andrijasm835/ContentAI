@@ -3,19 +3,23 @@ namespace Nistruct\ContentAI\Block\Adminhtml\SeoReport;
 
 use Magento\Backend\Block\Template;
 use Magento\Framework\Registry;
+use Nistruct\ContentAI\Model\Seo\AuditMetrics;
 use Nistruct\ContentAI\Model\SeoReport;
 
 class View extends Template
 {
     private Registry $registry;
+    private AuditMetrics $auditMetrics;
 
     public function __construct(
         Template\Context $context,
         Registry $registry,
+        ?AuditMetrics $auditMetrics = null,
         array $data = []
     ) {
         parent::__construct($context, $data);
         $this->registry = $registry;
+        $this->auditMetrics = $auditMetrics ?: new AuditMetrics();
     }
 
     public function getReport(): ?SeoReport
@@ -108,7 +112,7 @@ class View extends Template
 
     public function getIssueCodeLabel(string $code): string
     {
-        return ucwords(str_replace('_', ' ', $code));
+        return $this->auditMetrics->getIssueLabel($code);
     }
 
     public function getStatusLabel(string $status): string

@@ -14,92 +14,30 @@ class Analyzer
     private const SEVERITY_CRITICAL = 'critical';
     private const SEVERITY_WARNING = 'warning';
     private const SEVERITY_NOTICE = 'notice';
-    private const STATUS_OK = 'ok';
     private const STATUS_NO_MATCHES = 'no_matches';
     private const STATUS_NO_ISSUES = 'no_issues';
-    private const CATEGORY_CONTENT = 'content';
-    private const CATEGORY_URL = 'url';
-    private const CATEGORY_STATUS = 'status';
-    private const CATEGORY_OPTIONAL = 'optional';
-    private const AI_FIXABLE_CODES = [
-        'missing_meta_title' => true,
-        'long_meta_title' => true,
-        'short_meta_title' => true,
-        'duplicate_meta_title' => true,
-        'missing_meta_description' => true,
-        'long_meta_description' => true,
-        'short_meta_description' => true,
-        'duplicate_meta_description' => true,
-    ];
-    private const ISSUE_LABELS = [
-        'missing_meta_title' => 'Missing meta title',
-        'long_meta_title' => 'Meta title is too long',
-        'short_meta_title' => 'Meta title is too short',
-        'duplicate_meta_title' => 'Duplicate meta title',
-        'missing_meta_description' => 'Missing meta description',
-        'long_meta_description' => 'Meta description is too long',
-        'short_meta_description' => 'Meta description is too short',
-        'duplicate_meta_description' => 'Duplicate meta description',
-        'missing_url_key' => 'Missing URL key',
-        'bad_url_key_format' => 'Suspicious URL key format',
-        'duplicate_request_path' => 'Duplicate request path',
-        'empty_request_path' => 'Empty request path',
-        'empty_target_path' => 'Empty target path',
-        'self_target' => 'Request path points to itself',
-        'legacy_redirect_path_format' => 'Legacy redirect path format is suspicious',
-        'bad_request_path_format' => 'Request path format is suspicious',
-        'missing_active_rewrite' => 'Missing active URL',
-        'inactive_entity_direct_rewrite' => 'Inactive item has an active URL',
-        'multiple_active_rewrites' => 'Multiple active URLs',
-        'legacy_redirects_present' => 'Legacy redirects present',
-        'disabled_product' => 'Product is disabled',
-        'inactive_category' => 'Category is inactive',
-        'inactive_cms_page' => 'CMS page is inactive',
-    ];
-    private const ISSUE_CATEGORIES = [
-        'missing_meta_title' => self::CATEGORY_CONTENT,
-        'long_meta_title' => self::CATEGORY_CONTENT,
-        'short_meta_title' => self::CATEGORY_CONTENT,
-        'duplicate_meta_title' => self::CATEGORY_CONTENT,
-        'missing_meta_description' => self::CATEGORY_CONTENT,
-        'long_meta_description' => self::CATEGORY_CONTENT,
-        'short_meta_description' => self::CATEGORY_CONTENT,
-        'duplicate_meta_description' => self::CATEGORY_CONTENT,
-        'missing_url_key' => self::CATEGORY_URL,
-        'bad_url_key_format' => self::CATEGORY_URL,
-        'duplicate_request_path' => self::CATEGORY_URL,
-        'empty_request_path' => self::CATEGORY_URL,
-        'empty_target_path' => self::CATEGORY_URL,
-        'self_target' => self::CATEGORY_URL,
-        'legacy_redirect_path_format' => self::CATEGORY_URL,
-        'bad_request_path_format' => self::CATEGORY_URL,
-        'missing_active_rewrite' => self::CATEGORY_URL,
-        'inactive_entity_direct_rewrite' => self::CATEGORY_URL,
-        'multiple_active_rewrites' => self::CATEGORY_URL,
-        'legacy_redirects_present' => self::CATEGORY_URL,
-        'disabled_product' => self::CATEGORY_STATUS,
-        'inactive_category' => self::CATEGORY_STATUS,
-        'inactive_cms_page' => self::CATEGORY_STATUS,
-    ];
 
     private ProductCollectionFactory $productCollectionFactory;
     private CategoryCollectionFactory $categoryCollectionFactory;
     private PageCollectionFactory $pageCollectionFactory;
     private ResourceConnection $resourceConnection;
     private StoreManagerInterface $storeManager;
+    private AuditMetrics $auditMetrics;
 
     public function __construct(
         ProductCollectionFactory $productCollectionFactory,
         CategoryCollectionFactory $categoryCollectionFactory,
         PageCollectionFactory $pageCollectionFactory,
         ResourceConnection $resourceConnection,
-        StoreManagerInterface $storeManager
+        StoreManagerInterface $storeManager,
+        ?AuditMetrics $auditMetrics = null
     ) {
         $this->productCollectionFactory = $productCollectionFactory;
         $this->categoryCollectionFactory = $categoryCollectionFactory;
         $this->pageCollectionFactory = $pageCollectionFactory;
         $this->resourceConnection = $resourceConnection;
         $this->storeManager = $storeManager;
+        $this->auditMetrics = $auditMetrics ?: new AuditMetrics();
     }
 
     public function analyze(string $scope, int $storeId, int $limit, int $offset = 0, array $filters = []): array
@@ -134,9 +72,7 @@ class Analyzer
         $collection = $this->productCollectionFactory->create();
         $collection->setStoreId($storeId)
             ->addAttributeToSelect(['name', 'sku', 'status', 'url_key', 'meta_title', 'meta_keyword', 'meta_description'])
-            ->setOrder('entity_id', 'ASC')
-            ->setPageSize($limit)
-            ->setCurPage($this->getPageFromOffset($limit, $offset));
+            ->setOrder('entity_id', 'ASC');
 
         if ($storeId > 0) {
             $collection->addStoreFilter($storeId);
@@ -156,10 +92,12 @@ class Analyzer
             'meta_keyword' => 'meta_keyword',
             'url_key' => 'url_key',
         ]);
+        $duplicateMetaTitles = $this->getDuplicateValueCounts($collection, 'meta_title');
+        $duplicateMetaDescriptions = $this->getDuplicateValueCounts($collection, 'meta_description');
+        $collection->setPageSize($limit)
+            ->setCurPage($this->getPageFromOffset($limit, $offset));
 
         $items = [];
-        $metaTitles = [];
-        $metaDescriptions = [];
         foreach ($collection as $product) {
             $identifier = (string) $product->getSku();
             $name = (string) $product->getName();
@@ -182,17 +120,15 @@ class Analyzer
                 $issues,
                 $this->analyzeEntityRewrites($rewrites, 'product', (int) $product->getData('status') === Status::STATUS_ENABLED, $duplicatePaths, $storeId > 0)
             );
+            $this->appendDuplicateValueIssue($issues, (string) $product->getData('meta_title'), $duplicateMetaTitles, 'duplicate_meta_title', 'Duplicate meta title.', 'product');
+            $this->appendDuplicateValueIssue($issues, (string) $product->getData('meta_description'), $duplicateMetaDescriptions, 'duplicate_meta_description', 'Duplicate meta description.', 'product');
 
-            $metaTitles[] = ['value' => (string) $product->getData('meta_title'), 'identifier' => $identifier];
-            $metaDescriptions[] = ['value' => (string) $product->getData('meta_description'), 'identifier' => $identifier];
             $items[] = $this->item('product', $identifier, $name, $issues, [
                 'entity_id' => (string) $product->getId(),
                 'rewrites' => $rewrites,
             ]);
         }
 
-        $this->appendDuplicateIssues($items, $metaTitles, 'duplicate_meta_title', 'Duplicate meta title in scanned products.');
-        $this->appendDuplicateIssues($items, $metaDescriptions, 'duplicate_meta_description', 'Duplicate meta description in scanned products.');
         return $this->section('products', 'Products', $items, $collection->getSize(), $offset, $filters, $storeId);
     }
 
@@ -204,9 +140,7 @@ class Analyzer
             ->addAttributeToSelect(['name', 'is_active', 'url_key', 'meta_title', 'meta_keywords', 'meta_description'])
             ->addAttributeToFilter('level', ['gteq' => 2])
             ->addFieldToFilter('path', ['like' => '1/' . $rootCategoryId . '/%'])
-            ->setOrder('entity_id', 'ASC')
-            ->setPageSize($limit)
-            ->setCurPage($this->getPageFromOffset($limit, $offset));
+            ->setOrder('entity_id', 'ASC');
         if ($filters['category_ids']) {
             $collection->addAttributeToFilter('entity_id', ['in' => $filters['category_ids']]);
         }
@@ -219,10 +153,12 @@ class Analyzer
             'meta_keywords' => 'meta_keywords',
             'url_key' => 'url_key',
         ]);
+        $duplicateMetaTitles = $this->getDuplicateValueCounts($collection, 'meta_title');
+        $duplicateMetaDescriptions = $this->getDuplicateValueCounts($collection, 'meta_description');
+        $collection->setPageSize($limit)
+            ->setCurPage($this->getPageFromOffset($limit, $offset));
 
         $items = [];
-        $metaTitles = [];
-        $metaDescriptions = [];
         foreach ($collection as $category) {
             $identifier = (string) $category->getId();
             $name = (string) $category->getName();
@@ -245,17 +181,15 @@ class Analyzer
                 $issues,
                 $this->analyzeEntityRewrites($rewrites, 'category', (bool) $category->getData('is_active'), $duplicatePaths, $storeId > 0)
             );
+            $this->appendDuplicateValueIssue($issues, (string) $category->getData('meta_title'), $duplicateMetaTitles, 'duplicate_meta_title', 'Duplicate meta title.', 'category');
+            $this->appendDuplicateValueIssue($issues, (string) $category->getData('meta_description'), $duplicateMetaDescriptions, 'duplicate_meta_description', 'Duplicate meta description.', 'category');
 
-            $metaTitles[] = ['value' => (string) $category->getData('meta_title'), 'identifier' => $identifier];
-            $metaDescriptions[] = ['value' => (string) $category->getData('meta_description'), 'identifier' => $identifier];
             $items[] = $this->item('category', $identifier, $name, $issues, [
                 'entity_id' => (string) $category->getId(),
                 'rewrites' => $rewrites,
             ]);
         }
 
-        $this->appendDuplicateIssues($items, $metaTitles, 'duplicate_meta_title', 'Duplicate meta title in scanned categories.');
-        $this->appendDuplicateIssues($items, $metaDescriptions, 'duplicate_meta_description', 'Duplicate meta description in scanned categories.');
         return $this->section('categories', 'Categories', $items, $collection->getSize(), $offset, $filters, $storeId);
     }
 
@@ -277,13 +211,13 @@ class Analyzer
             'meta_keywords' => 'meta_keywords',
             'identifier' => 'identifier',
         ]);
-        $collection->setOrder('page_id', 'ASC')
-            ->setPageSize($limit)
+        $collection->setOrder('page_id', 'ASC');
+        $duplicateMetaTitles = $this->getDuplicateValueCounts($collection, 'meta_title');
+        $duplicateMetaDescriptions = $this->getDuplicateValueCounts($collection, 'meta_description');
+        $collection->setPageSize($limit)
             ->setCurPage($this->getPageFromOffset($limit, $offset));
 
         $items = [];
-        $metaTitles = [];
-        $metaDescriptions = [];
         foreach ($collection as $page) {
             $identifier = (string) $page->getIdentifier();
             $title = (string) $page->getTitle();
@@ -306,17 +240,15 @@ class Analyzer
                 $issues,
                 $this->analyzeEntityRewrites($rewrites, 'cms page', (bool) $page->getIsActive(), $duplicatePaths, false)
             );
+            $this->appendDuplicateValueIssue($issues, (string) $page->getMetaTitle(), $duplicateMetaTitles, 'duplicate_meta_title', 'Duplicate meta title.', 'CMS page');
+            $this->appendDuplicateValueIssue($issues, (string) $page->getMetaDescription(), $duplicateMetaDescriptions, 'duplicate_meta_description', 'Duplicate meta description.', 'CMS page');
 
-            $metaTitles[] = ['value' => (string) $page->getMetaTitle(), 'identifier' => $identifier];
-            $metaDescriptions[] = ['value' => (string) $page->getMetaDescription(), 'identifier' => $identifier];
             $items[] = $this->item('cms_page', $identifier, $title, $issues, [
                 'entity_id' => (string) $page->getId(),
                 'rewrites' => $rewrites,
             ]);
         }
 
-        $this->appendDuplicateIssues($items, $metaTitles, 'duplicate_meta_title', 'Duplicate meta title in scanned CMS pages.');
-        $this->appendDuplicateIssues($items, $metaDescriptions, 'duplicate_meta_description', 'Duplicate meta description in scanned CMS pages.');
         return $this->section('cms', 'CMS Pages', $items, $collection->getSize(), $offset, $filters, $storeId);
     }
 
@@ -548,28 +480,33 @@ class Analyzer
         return $issues;
     }
 
-    private function appendDuplicateIssues(array &$items, array $values, string $code, string $message): void
+    private function getDuplicateValueCounts($collection, string $field): array
     {
-        $map = [];
-        foreach ($values as $row) {
-            $value = mb_strtolower(trim(strip_tags((string) $row['value'])));
-            if ($value === '') {
-                continue;
-            }
-            $map[$value][] = (string) $row['identifier'];
+        $select = clone $collection->getSelect();
+        $select->reset(\Zend_Db_Select::ORDER)
+            ->reset(\Zend_Db_Select::LIMIT_COUNT)
+            ->reset(\Zend_Db_Select::LIMIT_OFFSET);
+
+        return $this->auditMetrics->getDuplicateValueCounts(
+            $this->resourceConnection->getConnection()->fetchAll($select),
+            $field
+        );
+    }
+
+    private function appendDuplicateValueIssue(array &$issues, string $value, array $duplicateCounts, string $code, string $message, string $entityLabel): void
+    {
+        $normalized = mb_strtolower(trim(strip_tags($value)));
+        if ($normalized === '' || empty($duplicateCounts[$normalized])) {
+            return;
         }
 
-        foreach ($map as $identifiers) {
-            if (count($identifiers) < 2) {
-                continue;
-            }
-            foreach ($items as &$item) {
-                if (in_array($item['identifier'], $identifiers, true)) {
-                    $item['issues'][] = $this->issue(self::SEVERITY_WARNING, $code, $message, 'Make this value unique for the entity and store view.');
-                }
-            }
-            unset($item);
-        }
+        $count = (int) $duplicateCounts[$normalized];
+        $issues[] = $this->issue(
+            self::SEVERITY_WARNING,
+            $code,
+            $message,
+            'This value is used by ' . $count . ' ' . $entityLabel . ($count === 1 ? '.' : 's.') . ' Make it unique for the entity and store view.'
+        );
     }
 
     private function summarize(string $scope, int $storeId, int $limit, int $offset, array $filters, array $sections): array
@@ -594,6 +531,7 @@ class Analyzer
             'top_issues' => [],
         ];
         $issueCodes = [];
+        $allIssues = [];
 
         foreach ($sections as $section) {
             $summary['total_entities'] += (int) ($section['total_entities'] ?? 0);
@@ -609,17 +547,17 @@ class Analyzer
             foreach (($section['issue_codes'] ?? []) as $code => $count) {
                 $issueCodes[$code] = ($issueCodes[$code] ?? 0) + (int) $count;
             }
+            foreach (($section['items'] ?? []) as $item) {
+                foreach (($item['issues'] ?? []) as $issue) {
+                    $allIssues[] = $issue;
+                }
+            }
         }
 
         arsort($issueCodes);
         $summary['top_issues'] = array_slice($issueCodes, 0, 5, true);
-        $summary['health_score'] = $this->calculateScore(
-            $summary['total_entities'],
-            $summary['critical_count'],
-            $summary['warning_count'],
-            $summary['notice_count']
-        );
-        $summary['status'] = $this->getStatus((int) $summary['total_entities'], (int) $summary['total_issues']);
+        $summary['health_score'] = $this->auditMetrics->calculateScore((int) $summary['total_entities'], $allIssues);
+        $summary['status'] = $this->auditMetrics->getStatus((int) $summary['total_entities'], (int) $summary['total_issues']);
 
         return ['summary' => $summary, 'sections' => $sections];
     }
@@ -646,10 +584,10 @@ class Analyzer
         ];
 
         foreach ($section['items'] as &$item) {
-            $item['health_score'] = $this->calculateItemScore($item['issues'] ?? []);
-            $item['ai_fixable'] = $this->hasAiFixableIssue($item['issues'] ?? []);
-            $item['priority'] = $this->getItemPriority($item['issues'] ?? []);
-            $item['next_action'] = $this->getItemNextAction($item['issues'] ?? []);
+            $item['health_score'] = $this->auditMetrics->calculateItemScore($item['issues'] ?? []);
+            $item['ai_fixable'] = $this->auditMetrics->hasAiFixableIssue($item['issues'] ?? []);
+            $item['priority'] = $this->auditMetrics->getItemPriority($item['issues'] ?? []);
+            $item['next_action'] = $this->auditMetrics->getItemNextAction($item['issues'] ?? []);
             if ($item['ai_fixable']) {
                 $section['ai_fixable_items']++;
             }
@@ -662,17 +600,18 @@ class Analyzer
                 $code = (string) ($issue['code'] ?? 'issue');
                 $section['issue_codes'][$code] = ($section['issue_codes'][$code] ?? 0) + 1;
             }
-            $item['issues'] = $this->sortIssues($item['issues'] ?? []);
+            $item['issues'] = $this->auditMetrics->sortIssues($item['issues'] ?? []);
         }
         unset($item);
         arsort($section['issue_codes']);
-        $section['health_score'] = $this->calculateScore(
-            $section['total_entities'],
-            $section['critical_count'],
-            $section['warning_count'],
-            $section['notice_count']
-        );
-        $section['status'] = $this->getStatus((int) $section['total_entities'], (int) $section['total_issues']);
+        $sectionIssues = [];
+        foreach (($section['items'] ?? []) as $item) {
+            foreach (($item['issues'] ?? []) as $issue) {
+                $sectionIssues[] = $issue;
+            }
+        }
+        $section['health_score'] = $this->auditMetrics->calculateScore((int) $section['total_entities'], $sectionIssues);
+        $section['status'] = $this->auditMetrics->getStatus((int) $section['total_entities'], (int) $section['total_issues']);
         if ($section['status'] === self::STATUS_NO_MATCHES) {
             $section['empty_message'] = 'No items were scanned.';
             $section['empty_detail'] = $this->getNoMatchDetail($code, $filters, $storeId);
@@ -681,85 +620,6 @@ class Analyzer
         }
 
         return $section;
-    }
-
-    private function calculateScore(int $entities, int $critical, int $warning, int $notice): ?int
-    {
-        if ($entities <= 0) {
-            return null;
-        }
-
-        $penalty = ($critical * 18) + ($warning * 8) + ($notice * 3);
-        return max(0, min(100, 100 - (int) round($penalty / $entities)));
-    }
-
-    private function calculateItemScore(array $issues): int
-    {
-        $critical = 0;
-        $warning = 0;
-        $notice = 0;
-
-        foreach ($issues as $issue) {
-            $severity = (string) ($issue['severity'] ?? self::SEVERITY_NOTICE);
-            if ($severity === self::SEVERITY_CRITICAL) {
-                $critical++;
-            } elseif ($severity === self::SEVERITY_WARNING) {
-                $warning++;
-            } else {
-                $notice++;
-            }
-        }
-
-        return max(0, min(100, 100 - ($critical * 28) - ($warning * 13) - ($notice * 5)));
-    }
-
-    private function hasAiFixableIssue(array $issues): bool
-    {
-        foreach ($issues as $issue) {
-            if (!empty($issue['ai_fixable'])) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private function getItemPriority(array $issues): string
-    {
-        foreach ($issues as $issue) {
-            if (($issue['severity'] ?? '') === self::SEVERITY_CRITICAL) {
-                return 'fix_now';
-            }
-        }
-        foreach ($issues as $issue) {
-            if (($issue['severity'] ?? '') === self::SEVERITY_WARNING) {
-                return 'review';
-            }
-        }
-
-        return $issues ? 'monitor' : 'ok';
-    }
-
-    private function getItemNextAction(array $issues): string
-    {
-        if (!$issues) {
-            return 'No action needed.';
-        }
-        if ($this->hasAiFixableIssue($issues)) {
-            return 'Generate improved SEO content with ContentAI, then review URL rewrite notes.';
-        }
-
-        foreach ($issues as $issue) {
-            $code = (string) ($issue['code'] ?? '');
-            if (in_array($code, ['duplicate_request_path', 'empty_request_path', 'empty_target_path', 'self_target'], true)) {
-                return 'Review URL rewrite records before changing generated content.';
-            }
-            if (in_array($code, ['missing_active_rewrite', 'multiple_active_rewrites', 'inactive_entity_direct_rewrite'], true)) {
-                return 'Regenerate, remove, or redirect URL rewrites for this entity.';
-            }
-        }
-
-        return 'Review and decide whether the recommendation is still relevant.';
     }
 
     private function getPageFromOffset(int $limit, int $offset): int
@@ -779,42 +639,7 @@ class Analyzer
 
     private function issue(string $severity, string $code, string $message, string $recommendation): array
     {
-        return [
-            'severity' => $severity,
-            'code' => $code,
-            'label' => self::ISSUE_LABELS[$code] ?? ucwords(str_replace('_', ' ', $code)),
-            'category' => self::ISSUE_CATEGORIES[$code] ?? self::CATEGORY_OPTIONAL,
-            'message' => $message,
-            'recommendation' => $recommendation,
-            'ai_fixable' => isset(self::AI_FIXABLE_CODES[$code]),
-        ];
-    }
-
-    private function getStatus(int $entities, int $issues): string
-    {
-        if ($entities <= 0) {
-            return self::STATUS_NO_MATCHES;
-        }
-
-        return $issues > 0 ? self::STATUS_OK : self::STATUS_NO_ISSUES;
-    }
-
-    private function sortIssues(array $issues): array
-    {
-        $severityOrder = [self::SEVERITY_CRITICAL => 0, self::SEVERITY_WARNING => 1, self::SEVERITY_NOTICE => 2];
-        $categoryOrder = [self::CATEGORY_CONTENT => 0, self::CATEGORY_URL => 1, self::CATEGORY_STATUS => 2, self::CATEGORY_OPTIONAL => 3];
-        usort($issues, static function (array $a, array $b) use ($severityOrder, $categoryOrder): int {
-            $severityCompare = ($severityOrder[$a['severity'] ?? self::SEVERITY_NOTICE] ?? 9)
-                <=> ($severityOrder[$b['severity'] ?? self::SEVERITY_NOTICE] ?? 9);
-            if ($severityCompare !== 0) {
-                return $severityCompare;
-            }
-
-            return ($categoryOrder[$a['category'] ?? self::CATEGORY_OPTIONAL] ?? 9)
-                <=> ($categoryOrder[$b['category'] ?? self::CATEGORY_OPTIONAL] ?? 9);
-        });
-
-        return $issues;
+        return $this->auditMetrics->issue($severity, $code, $message, $recommendation);
     }
 
     private function getNoMatchDetail(string $sectionCode, array $filters, int $storeId): string
