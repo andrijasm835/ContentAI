@@ -15,6 +15,7 @@ $sections = $block->getSections();
     .contentai-seo-summary-item.good { border-left-color: #4f8a10; }
     .contentai-seo-summary-item.medium { border-left-color: #eb5202; }
     .contentai-seo-summary-item.bad { border-left-color: #e22626; }
+    .contentai-seo-summary-item.neutral { border-left-color: #8a837f; }
     .contentai-seo-top { background: #fff; border: 1px solid #d6d6d6; margin-bottom: 20px; padding: 14px 16px; }
     .contentai-seo-top-title { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
     .contentai-seo-top-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; }
@@ -27,14 +28,17 @@ $sections = $block->getSections();
     .contentai-seo-section { background: #fff; border: 1px solid #d6d6d6; margin-bottom: 18px; }
     .contentai-seo-section-title { background: #514943; color: #fff; display: flex; justify-content: space-between; padding: 13px 16px; }
     .contentai-seo-item { border-top: 1px solid #e5e5e5; padding: 16px; }
-    .contentai-seo-item-head { align-items: baseline; display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; margin-bottom: 10px; }
+    .contentai-seo-item-head { align-items: flex-start; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; margin-bottom: 10px; }
     .contentai-seo-item-title { font-size: 16px; font-weight: 700; }
     .contentai-seo-item-meta { color: #666; font-size: 12px; }
+    .contentai-seo-item-score { font-size: 18px; font-weight: 700; text-align: right; }
+    .contentai-seo-item-score span { color: #666; display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; }
     .contentai-seo-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
     .contentai-seo-badge { border: 1px solid #d6d6d6; display: inline-block; font-size: 11px; font-weight: 700; padding: 4px 7px; text-transform: uppercase; }
     .contentai-seo-badge.fix_now { background: #fff1f1; border-color: #e22626; color: #9f1d1d; }
     .contentai-seo-badge.review { background: #fff6e8; border-color: #eb5202; color: #8a3b00; }
     .contentai-seo-badge.monitor { background: #eef6ff; border-color: #1979c3; color: #145f99; }
+    .contentai-seo-badge.ok { background: #f4fbf4; border-color: #4f8a10; color: #2f6410; }
     .contentai-seo-badge.ai { background: #f4fbf4; border-color: #4f8a10; color: #2f6410; }
     .contentai-seo-next-action { background: #fafafa; border: 1px solid #e5e5e5; margin-bottom: 10px; padding: 9px 10px; }
     .contentai-seo-next-action strong { margin-right: 6px; }
@@ -43,8 +47,14 @@ $sections = $block->getSections();
     .contentai-seo-issue.warning { border-left-color: #eb5202; }
     .contentai-seo-issue.notice { border-left-color: #1979c3; }
     .contentai-seo-issue-label { display: inline-block; font-size: 11px; font-weight: 700; margin-bottom: 5px; text-transform: uppercase; }
+    .contentai-seo-issue-title { font-weight: 700; margin-bottom: 4px; }
     .contentai-seo-issue-message { font-weight: 600; margin-bottom: 4px; }
     .contentai-seo-issue-recommendation { color: #444; }
+    .contentai-seo-issue-details { margin-top: 6px; }
+    .contentai-seo-issue-details summary { color: #666; cursor: pointer; font-size: 12px; font-weight: 700; }
+    .contentai-seo-issue-category { border-top: 1px solid #e5e5e5; margin-top: 12px; padding-top: 12px; }
+    .contentai-seo-issue-category:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
+    .contentai-seo-issue-category-title { color: #514943; font-size: 12px; font-weight: 700; margin-bottom: 8px; text-transform: uppercase; }
     .contentai-seo-rewrites { border: 1px solid #e5e5e5; margin: 12px 0; }
     .contentai-seo-rewrite { align-items: start; border-top: 1px solid #eee; display: grid; gap: 10px; grid-template-columns: 90px minmax(0, 1fr) minmax(0, 1fr); padding: 9px 10px; }
     .contentai-seo-rewrite:first-child { border-top: 0; }
@@ -53,7 +63,9 @@ $sections = $block->getSections();
     .contentai-seo-rewrite-status.redirect { background: #1979c3; }
     .contentai-seo-rewrite-label { color: #666; display: block; font-size: 11px; font-weight: 700; margin-bottom: 3px; text-transform: uppercase; }
     .contentai-seo-rewrite-value { overflow-wrap: anywhere; }
-    .contentai-seo-empty { background: #fff; border: 1px solid #d6d6d6; padding: 18px; }
+    .contentai-seo-section-empty, .contentai-seo-empty { background: #fff; border: 1px solid #d6d6d6; padding: 18px; }
+    .contentai-seo-section-empty { border-width: 0; }
+    .contentai-seo-section-empty strong { display: block; margin-bottom: 5px; }
     @media (max-width: 900px) { .contentai-seo-rewrite { grid-template-columns: 1fr; } }
 </style>
 <div class="contentai-seo-report">
@@ -74,12 +86,21 @@ $sections = $block->getSections();
             </div>
         </div>
     </div>
-    <?php $score = (int) ($summary['health_score'] ?? 100); ?>
-    <?php $scoreClass = $score >= 80 ? 'good' : ($score >= 55 ? 'medium' : 'bad'); ?>
+    <?php $summaryTotalEntities = (int) ($summary['total_entities'] ?? $report->getData('total_entities')); ?>
+    <?php $summaryTotalIssues = (int) ($summary['total_issues'] ?? $report->getData('total_issues')); ?>
+    <?php $summaryStatus = (string) ($summary['status'] ?? ($summaryTotalEntities === 0 ? 'no_matches' : ($summaryTotalIssues === 0 ? 'no_issues' : 'ok'))); ?>
+    <?php $scoreValue = $summaryStatus === 'no_matches' ? null : ($summary['health_score'] ?? $report->getData('health_score')); ?>
+    <?php $hasScore = is_numeric($scoreValue); ?>
+    <?php $score = $hasScore ? (int) $scoreValue : null; ?>
+    <?php $scoreClass = !$hasScore ? 'neutral' : ($score >= 80 ? 'good' : ($score >= 55 ? 'medium' : 'bad')); ?>
     <section class="contentai-seo-summary">
         <div class="contentai-seo-summary-item <?= $block->escapeHtmlAttr($scoreClass) ?>">
             <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('SEO Score')) ?></span>
-            <span class="contentai-seo-summary-value"><?= $score ?> / 100</span>
+            <span class="contentai-seo-summary-value"><?= $hasScore ? $block->escapeHtml(__('%1 / 100', $score)) : $block->escapeHtml(__('N/A')) ?></span>
+        </div>
+        <div class="contentai-seo-summary-item <?= $block->escapeHtmlAttr($summaryStatus === 'no_issues' ? 'good' : ($summaryStatus === 'no_matches' ? 'neutral' : '')) ?>">
+            <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('Audit State')) ?></span>
+            <span class="contentai-seo-summary-value"><?= $block->escapeHtml(__($block->getStatusLabel($summaryStatus))) ?></span>
         </div>
         <div class="contentai-seo-summary-item">
             <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('History ID')) ?></span>
@@ -95,7 +116,7 @@ $sections = $block->getSections();
         </div>
         <div class="contentai-seo-summary-item">
             <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('Checked')) ?></span>
-            <span class="contentai-seo-summary-value"><?= (int) ($summary['total_entities'] ?? $report->getData('total_entities')) ?></span>
+            <span class="contentai-seo-summary-value"><?= $summaryTotalEntities ?></span>
         </div>
         <div class="contentai-seo-summary-item">
             <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('Total Found')) ?></span>
@@ -107,7 +128,7 @@ $sections = $block->getSections();
         </div>
         <div class="contentai-seo-summary-item">
             <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('Problems')) ?></span>
-            <span class="contentai-seo-summary-value"><?= (int) ($summary['total_issues'] ?? $report->getData('total_issues')) ?></span>
+            <span class="contentai-seo-summary-value"><?= $summaryTotalIssues ?></span>
         </div>
         <div class="contentai-seo-summary-item">
             <span class="contentai-seo-summary-label"><?= $block->escapeHtml(__('Can Auto-Improve')) ?></span>
@@ -156,28 +177,49 @@ $sections = $block->getSections();
     <?php endif; ?>
 
     <?php foreach ($sections as $section): ?>
+        <?php $sectionTotalEntities = (int) ($section['total_entities'] ?? 0); ?>
+        <?php $sectionTotalIssues = (int) ($section['total_issues'] ?? 0); ?>
+        <?php $sectionStatus = (string) ($section['status'] ?? ($sectionTotalEntities === 0 ? 'no_matches' : ($sectionTotalIssues === 0 ? 'no_issues' : 'ok'))); ?>
         <section class="contentai-seo-section">
             <div class="contentai-seo-section-title">
                 <strong><?= $block->escapeHtml((string) ($section['label'] ?? 'Section')) ?></strong>
                 <span>
-                    <?= (int) ($section['total_entities'] ?? 0) ?> / <?= (int) ($section['total_available'] ?? 0) ?>
+                    <?= $sectionTotalEntities ?> / <?= (int) ($section['total_available'] ?? 0) ?>
                     <?= $block->escapeHtml(__('scanned')) ?>,
-                    <?= (int) ($section['total_issues'] ?? 0) ?> <?= $block->escapeHtml(__('issue(s)')) ?>
+                    <?= $sectionTotalIssues ?> <?= $block->escapeHtml(__('issue(s)')) ?>
                 </span>
             </div>
+            <?php if ($sectionStatus === 'no_matches'): ?>
+                <div class="contentai-seo-section-empty">
+                    <strong><?= $block->escapeHtml((string) ($section['empty_message'] ?? __('No items were scanned.'))) ?></strong>
+                    <span><?= $block->escapeHtml((string) ($section['empty_detail'] ?? __('No items matched the selected Store View and filters.'))) ?></span>
+                </div>
+            <?php elseif ($sectionStatus === 'no_issues'): ?>
+                <div class="contentai-seo-section-empty">
+                    <strong><?= $block->escapeHtml((string) ($section['empty_message'] ?? __('No SEO issues found.'))) ?></strong>
+                    <span><?= $block->escapeHtml(__('The scanned items did not trigger any configured SEO checks.')) ?></span>
+                </div>
+            <?php endif; ?>
             <?php foreach (($section['items'] ?? []) as $item): ?>
                 <?php $issues = is_array($item['issues'] ?? null) ? $item['issues'] : []; ?>
                 <?php $rewrites = is_array($item['rewrites'] ?? null) ? $item['rewrites'] : []; ?>
                 <?php if (!$issues) { continue; } ?>
+                <?php $groupedIssues = $block->getGroupedIssues($issues); ?>
                 <div class="contentai-seo-item">
                     <div class="contentai-seo-item-head">
-                        <div class="contentai-seo-item-title"><?= $block->escapeHtml((string) ($item['label'] ?? '-')) ?></div>
-                        <div class="contentai-seo-item-meta">
-                            <?= $block->escapeHtml((string) ($item['type'] ?? '-')) ?>:
-                            <?= $block->escapeHtml((string) ($item['identifier'] ?? '-')) ?>
-                            <?php if (!empty($item['target_path'])): ?>
-                                | <?= $block->escapeHtml(__('Target')) ?>: <?= $block->escapeHtml((string) $item['target_path']) ?>
-                            <?php endif; ?>
+                        <div>
+                            <div class="contentai-seo-item-title"><?= $block->escapeHtml((string) ($item['label'] ?? '-')) ?></div>
+                            <div class="contentai-seo-item-meta">
+                                <?= $block->escapeHtml((string) ($item['type'] ?? '-')) ?>:
+                                <?= $block->escapeHtml((string) ($item['identifier'] ?? '-')) ?>
+                                <?php if (!empty($item['target_path'])): ?>
+                                    | <?= $block->escapeHtml(__('Target')) ?>: <?= $block->escapeHtml((string) $item['target_path']) ?>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <div class="contentai-seo-item-score">
+                            <span><?= $block->escapeHtml(__('Health')) ?></span>
+                            <?= (int) ($item['health_score'] ?? 100) ?>/100
                         </div>
                     </div>
                     <div class="contentai-seo-badges">
@@ -185,7 +227,7 @@ $sections = $block->getSections();
                             <?= $block->escapeHtml($block->getPriorityLabel((string) ($item['priority'] ?? 'monitor'))) ?>
                         </span>
                         <span class="contentai-seo-badge">
-                            <?= $block->escapeHtml(__('Score')) ?> <?= (int) ($item['health_score'] ?? 100) ?>/100
+                            <?= count($issues) ?> <?= $block->escapeHtml(__('issue(s)')) ?>
                         </span>
                         <?php if (!empty($item['ai_fixable'])): ?>
                             <span class="contentai-seo-badge ai"><?= $block->escapeHtml(__('ContentAI can help')) ?></span>
@@ -197,36 +239,51 @@ $sections = $block->getSections();
                             <?= $block->escapeHtml((string) $item['next_action']) ?>
                         </div>
                     <?php endif; ?>
-                    <?php if ($rewrites): ?>
-                        <div class="contentai-seo-rewrites">
-                            <?php foreach ($rewrites as $rewrite): ?>
-                                <?php $redirectType = (int) ($rewrite['redirect_type'] ?? 0); ?>
-                                <div class="contentai-seo-rewrite">
-                                    <div>
-                                        <span class="contentai-seo-rewrite-status <?= $redirectType === 0 ? 'active' : 'redirect' ?>">
-                                            <?= $redirectType === 0 ? $block->escapeHtml(__('Active')) : $block->escapeHtml(__('Redirect %1', $redirectType)) ?>
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <span class="contentai-seo-rewrite-label"><?= $block->escapeHtml(__('Request Path')) ?></span>
-                                        <span class="contentai-seo-rewrite-value"><?= $block->escapeHtml((string) ($rewrite['request_path'] ?? '-')) ?></span>
-                                    </div>
-                                    <div>
-                                        <span class="contentai-seo-rewrite-label"><?= $block->escapeHtml(__('Target Path')) ?></span>
-                                        <span class="contentai-seo-rewrite-value"><?= $block->escapeHtml((string) ($rewrite['target_path'] ?? '-')) ?></span>
-                                    </div>
+                    <?php foreach ($groupedIssues as $category => $categoryIssues): ?>
+                        <div class="contentai-seo-issue-category">
+                            <div class="contentai-seo-issue-category-title"><?= $block->escapeHtml(__($block->getCategoryLabel((string) $category))) ?></div>
+                            <?php foreach ($categoryIssues as $issue): ?>
+                                <?php $severity = (string) ($issue['severity'] ?? 'notice'); ?>
+                                <div class="contentai-seo-issue <?= $block->escapeHtmlAttr($severity) ?>">
+                                    <div class="contentai-seo-issue-label"><?= $block->escapeHtml($block->getSeverityLabel($severity)) ?></div>
+                                    <div class="contentai-seo-issue-title"><?= $block->escapeHtml((string) ($issue['label'] ?? $block->getIssueCodeLabel((string) ($issue['code'] ?? 'issue')))) ?></div>
+                                    <div class="contentai-seo-issue-message"><?= $block->escapeHtml((string) ($issue['message'] ?? '')) ?></div>
+                                    <div class="contentai-seo-issue-recommendation"><?= $block->escapeHtml((string) ($issue['recommendation'] ?? '')) ?></div>
+                                    <?php if (!empty($issue['code'])): ?>
+                                        <details class="contentai-seo-issue-details">
+                                            <summary><?= $block->escapeHtml(__('Technical details')) ?></summary>
+                                            <span><?= $block->escapeHtml(__('Code')) ?>: <?= $block->escapeHtml((string) $issue['code']) ?></span>
+                                        </details>
+                                    <?php endif; ?>
                                 </div>
                             <?php endforeach; ?>
                         </div>
-                    <?php endif; ?>
-                    <?php foreach ($issues as $issue): ?>
-                        <?php $severity = (string) ($issue['severity'] ?? 'notice'); ?>
-                        <div class="contentai-seo-issue <?= $block->escapeHtmlAttr($severity) ?>">
-                            <div class="contentai-seo-issue-label"><?= $block->escapeHtml($block->getSeverityLabel($severity)) ?> | <?= $block->escapeHtml((string) ($issue['code'] ?? 'issue')) ?></div>
-                            <div class="contentai-seo-issue-message"><?= $block->escapeHtml((string) ($issue['message'] ?? '')) ?></div>
-                            <div class="contentai-seo-issue-recommendation"><?= $block->escapeHtml((string) ($issue['recommendation'] ?? '')) ?></div>
-                        </div>
                     <?php endforeach; ?>
+                    <?php if ($rewrites): ?>
+                        <details class="contentai-seo-issue-details">
+                            <summary><?= $block->escapeHtml(__('URL rewrite details')) ?></summary>
+                            <div class="contentai-seo-rewrites">
+                                <?php foreach ($rewrites as $rewrite): ?>
+                                    <?php $redirectType = (int) ($rewrite['redirect_type'] ?? 0); ?>
+                                    <div class="contentai-seo-rewrite">
+                                        <div>
+                                            <span class="contentai-seo-rewrite-status <?= $redirectType === 0 ? 'active' : 'redirect' ?>">
+                                                <?= $redirectType === 0 ? $block->escapeHtml(__('Active')) : $block->escapeHtml(__('Redirect %1', $redirectType)) ?>
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span class="contentai-seo-rewrite-label"><?= $block->escapeHtml(__('Request Path')) ?></span>
+                                            <span class="contentai-seo-rewrite-value"><?= $block->escapeHtml((string) ($rewrite['request_path'] ?? '-')) ?></span>
+                                        </div>
+                                        <div>
+                                            <span class="contentai-seo-rewrite-label"><?= $block->escapeHtml(__('Target Path')) ?></span>
+                                            <span class="contentai-seo-rewrite-value"><?= $block->escapeHtml((string) ($rewrite['target_path'] ?? '-')) ?></span>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </details>
+                    <?php endif; ?>
                 </div>
             <?php endforeach; ?>
         </section>

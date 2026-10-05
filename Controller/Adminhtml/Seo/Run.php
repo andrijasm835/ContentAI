@@ -58,7 +58,7 @@ class Run extends Action implements HttpPostActionInterface
             $report->setData('batch_offset', (int) ($summary['offset'] ?? $offset));
             $report->setData('total_available', (int) ($summary['total_available'] ?? 0));
             $report->setData('has_next_batch', !empty($summary['has_next_batch']) ? 1 : 0);
-            $report->setData('health_score', (int) ($summary['health_score'] ?? 100));
+            $report->setData('health_score', isset($summary['health_score']) ? (int) $summary['health_score'] : 0);
             $report->setData('ai_fixable_items', (int) ($summary['ai_fixable_items'] ?? 0));
             $report->setData('total_entities', (int) ($summary['total_entities'] ?? 0));
             $report->setData('total_issues', (int) ($summary['total_issues'] ?? 0));
@@ -69,12 +69,16 @@ class Run extends Action implements HttpPostActionInterface
             $report->setData('created_at', date('Y-m-d H:i:s'));
             $report->save();
 
-            $this->messageManager->addSuccessMessage(__(
-                'SEO audit report #%1 created. Found %2 issue(s) across %3 scanned item(s).',
-                $report->getId(),
-                (int) $report->getData('total_issues'),
-                (int) $report->getData('total_entities')
-            ));
+            if (($summary['status'] ?? '') === 'no_matches') {
+                $this->messageManager->addNoticeMessage(__('SEO audit report #%1 created. No items matched the selected Store View and filters.', $report->getId()));
+            } else {
+                $this->messageManager->addSuccessMessage(__(
+                    'SEO audit report #%1 created. Found %2 issue(s) across %3 scanned item(s).',
+                    $report->getId(),
+                    (int) $report->getData('total_issues'),
+                    (int) $report->getData('total_entities')
+                ));
+            }
 
             return $this->_redirect('nistruct_contentai/seoreport/view', ['id' => $report->getId()]);
         } catch (LocalizedException $e) {

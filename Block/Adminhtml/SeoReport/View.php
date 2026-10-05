@@ -110,4 +110,44 @@ class View extends Template
     {
         return ucwords(str_replace('_', ' ', $code));
     }
+
+    public function getStatusLabel(string $status): string
+    {
+        return [
+            'ok' => 'Issues Found',
+            'no_matches' => 'No Matches',
+            'no_issues' => 'No Issues',
+        ][$status] ?? 'Unavailable';
+    }
+
+    public function getCategoryLabel(string $category): string
+    {
+        return [
+            'content' => 'Content SEO',
+            'url' => 'URL & Rewrites',
+            'status' => 'Status / Indexability',
+            'optional' => 'Optional / Legacy',
+        ][$category] ?? ucwords(str_replace('_', ' ', $category));
+    }
+
+    public function getGroupedIssues(array $issues): array
+    {
+        $groups = [];
+        foreach ($issues as $issue) {
+            if (!is_array($issue)) {
+                continue;
+            }
+            $category = (string) ($issue['category'] ?? 'optional');
+            $groups[$category][] = $issue;
+        }
+
+        $order = ['content', 'url', 'status', 'optional'];
+        uksort($groups, static function (string $a, string $b) use ($order): int {
+            $aIndex = array_search($a, $order, true);
+            $bIndex = array_search($b, $order, true);
+            return ($aIndex === false ? 99 : $aIndex) <=> ($bIndex === false ? 99 : $bIndex);
+        });
+
+        return $groups;
+    }
 }

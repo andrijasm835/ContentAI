@@ -14,6 +14,13 @@ class Analyzer
     private const SEVERITY_CRITICAL = 'critical';
     private const SEVERITY_WARNING = 'warning';
     private const SEVERITY_NOTICE = 'notice';
+    private const STATUS_OK = 'ok';
+    private const STATUS_NO_MATCHES = 'no_matches';
+    private const STATUS_NO_ISSUES = 'no_issues';
+    private const CATEGORY_CONTENT = 'content';
+    private const CATEGORY_URL = 'url';
+    private const CATEGORY_STATUS = 'status';
+    private const CATEGORY_OPTIONAL = 'optional';
     private const AI_FIXABLE_CODES = [
         'missing_meta_title' => true,
         'long_meta_title' => true,
@@ -23,8 +30,56 @@ class Analyzer
         'long_meta_description' => true,
         'short_meta_description' => true,
         'duplicate_meta_description' => true,
-        'missing_meta_keywords' => true,
-        'url_key_may_not_match_name' => true,
+    ];
+    private const ISSUE_LABELS = [
+        'missing_meta_title' => 'Missing meta title',
+        'long_meta_title' => 'Meta title is too long',
+        'short_meta_title' => 'Meta title is too short',
+        'duplicate_meta_title' => 'Duplicate meta title',
+        'missing_meta_description' => 'Missing meta description',
+        'long_meta_description' => 'Meta description is too long',
+        'short_meta_description' => 'Meta description is too short',
+        'duplicate_meta_description' => 'Duplicate meta description',
+        'missing_url_key' => 'Missing URL key',
+        'bad_url_key_format' => 'Suspicious URL key format',
+        'duplicate_request_path' => 'Duplicate request path',
+        'empty_request_path' => 'Empty request path',
+        'empty_target_path' => 'Empty target path',
+        'self_target' => 'Request path points to itself',
+        'legacy_redirect_path_format' => 'Legacy redirect path format is suspicious',
+        'bad_request_path_format' => 'Request path format is suspicious',
+        'missing_active_rewrite' => 'Missing active URL',
+        'inactive_entity_direct_rewrite' => 'Inactive item has an active URL',
+        'multiple_active_rewrites' => 'Multiple active URLs',
+        'legacy_redirects_present' => 'Legacy redirects present',
+        'disabled_product' => 'Product is disabled',
+        'inactive_category' => 'Category is inactive',
+        'inactive_cms_page' => 'CMS page is inactive',
+    ];
+    private const ISSUE_CATEGORIES = [
+        'missing_meta_title' => self::CATEGORY_CONTENT,
+        'long_meta_title' => self::CATEGORY_CONTENT,
+        'short_meta_title' => self::CATEGORY_CONTENT,
+        'duplicate_meta_title' => self::CATEGORY_CONTENT,
+        'missing_meta_description' => self::CATEGORY_CONTENT,
+        'long_meta_description' => self::CATEGORY_CONTENT,
+        'short_meta_description' => self::CATEGORY_CONTENT,
+        'duplicate_meta_description' => self::CATEGORY_CONTENT,
+        'missing_url_key' => self::CATEGORY_URL,
+        'bad_url_key_format' => self::CATEGORY_URL,
+        'duplicate_request_path' => self::CATEGORY_URL,
+        'empty_request_path' => self::CATEGORY_URL,
+        'empty_target_path' => self::CATEGORY_URL,
+        'self_target' => self::CATEGORY_URL,
+        'legacy_redirect_path_format' => self::CATEGORY_URL,
+        'bad_request_path_format' => self::CATEGORY_URL,
+        'missing_active_rewrite' => self::CATEGORY_URL,
+        'inactive_entity_direct_rewrite' => self::CATEGORY_URL,
+        'multiple_active_rewrites' => self::CATEGORY_URL,
+        'legacy_redirects_present' => self::CATEGORY_URL,
+        'disabled_product' => self::CATEGORY_STATUS,
+        'inactive_category' => self::CATEGORY_STATUS,
+        'inactive_cms_page' => self::CATEGORY_STATUS,
     ];
 
     private ProductCollectionFactory $productCollectionFactory;
@@ -138,7 +193,7 @@ class Analyzer
 
         $this->appendDuplicateIssues($items, $metaTitles, 'duplicate_meta_title', 'Duplicate meta title in scanned products.');
         $this->appendDuplicateIssues($items, $metaDescriptions, 'duplicate_meta_description', 'Duplicate meta description in scanned products.');
-        return $this->section('Products', $items, $collection->getSize(), $offset);
+        return $this->section('products', 'Products', $items, $collection->getSize(), $offset, $filters, $storeId);
     }
 
     private function analyzeCategories(int $storeId, int $limit, int $offset, array $duplicatePaths, array $filters): array
@@ -201,7 +256,7 @@ class Analyzer
 
         $this->appendDuplicateIssues($items, $metaTitles, 'duplicate_meta_title', 'Duplicate meta title in scanned categories.');
         $this->appendDuplicateIssues($items, $metaDescriptions, 'duplicate_meta_description', 'Duplicate meta description in scanned categories.');
-        return $this->section('Categories', $items, $collection->getSize(), $offset);
+        return $this->section('categories', 'Categories', $items, $collection->getSize(), $offset, $filters, $storeId);
     }
 
     private function analyzeCmsPages(int $storeId, int $limit, int $offset, array $duplicatePaths, array $filters): array
@@ -262,7 +317,7 @@ class Analyzer
 
         $this->appendDuplicateIssues($items, $metaTitles, 'duplicate_meta_title', 'Duplicate meta title in scanned CMS pages.');
         $this->appendDuplicateIssues($items, $metaDescriptions, 'duplicate_meta_description', 'Duplicate meta description in scanned CMS pages.');
-        return $this->section('CMS Pages', $items, $collection->getSize(), $offset);
+        return $this->section('cms', 'CMS Pages', $items, $collection->getSize(), $offset, $filters, $storeId);
     }
 
     private function getDuplicateRequestPaths(int $storeId): array
@@ -484,18 +539,10 @@ class Analyzer
             $issues[] = $this->issue(self::SEVERITY_NOTICE, 'short_meta_description', 'Meta description is short.', 'Consider expanding it with relevant product/category value.');
         }
 
-        if (trim($metaKeywords) === '') {
-            $issues[] = $this->issue(self::SEVERITY_NOTICE, 'missing_meta_keywords', 'Meta keywords are missing.', 'Optional: add a short comma-separated keyword set if this project still uses meta keywords.');
-        }
-
         if (trim($urlKey) === '') {
             $issues[] = $this->issue(self::SEVERITY_CRITICAL, 'missing_url_key', 'URL key is missing.', 'Generate a lowercase hyphenated URL key from the name.');
         } elseif ($urlKey !== strtolower($urlKey) || preg_match('/\s|%20|_|\//', $urlKey)) {
             $issues[] = $this->issue(self::SEVERITY_WARNING, 'bad_url_key_format', 'URL key format is suspicious.', 'Use lowercase words separated by hyphens, without spaces, underscores, or slashes.');
-        }
-
-        if ($name !== '' && $urlKey !== '' && stripos(str_replace('-', ' ', $urlKey), mb_substr($name, 0, min(8, mb_strlen($name)))) === false) {
-            $issues[] = $this->issue(self::SEVERITY_NOTICE, 'url_key_may_not_match_name', 'URL key may not match the name.', 'Review whether the URL key still describes this ' . str_replace('_', ' ', $type) . '.');
         }
 
         return $issues;
@@ -521,6 +568,7 @@ class Analyzer
                     $item['issues'][] = $this->issue(self::SEVERITY_WARNING, $code, $message, 'Make this value unique for the entity and store view.');
                 }
             }
+            unset($item);
         }
     }
 
@@ -534,7 +582,8 @@ class Analyzer
             'next_offset' => $offset + $limit,
             'filters' => $filters,
             'has_next_batch' => false,
-            'health_score' => 100,
+            'status' => self::STATUS_NO_MATCHES,
+            'health_score' => null,
             'ai_fixable_items' => 0,
             'total_entities' => 0,
             'total_available' => 0,
@@ -570,18 +619,23 @@ class Analyzer
             $summary['warning_count'],
             $summary['notice_count']
         );
+        $summary['status'] = $this->getStatus((int) $summary['total_entities'], (int) $summary['total_issues']);
 
         return ['summary' => $summary, 'sections' => $sections];
     }
 
-    private function section(string $label, array $items, int $totalAvailable, int $offset): array
+    private function section(string $code, string $label, array $items, int $totalAvailable, int $offset, array $filters, int $storeId): array
     {
         $section = [
+            'code' => $code,
             'label' => $label,
+            'status' => self::STATUS_NO_MATCHES,
+            'empty_message' => '',
+            'empty_detail' => '',
             'total_entities' => count($items),
             'total_available' => $totalAvailable,
             'has_next_batch' => count($items) > 0 && ($offset + count($items)) < $totalAvailable,
-            'health_score' => 100,
+            'health_score' => null,
             'ai_fixable_items' => 0,
             'total_issues' => 0,
             'critical_count' => 0,
@@ -608,6 +662,7 @@ class Analyzer
                 $code = (string) ($issue['code'] ?? 'issue');
                 $section['issue_codes'][$code] = ($section['issue_codes'][$code] ?? 0) + 1;
             }
+            $item['issues'] = $this->sortIssues($item['issues'] ?? []);
         }
         unset($item);
         arsort($section['issue_codes']);
@@ -617,14 +672,21 @@ class Analyzer
             $section['warning_count'],
             $section['notice_count']
         );
+        $section['status'] = $this->getStatus((int) $section['total_entities'], (int) $section['total_issues']);
+        if ($section['status'] === self::STATUS_NO_MATCHES) {
+            $section['empty_message'] = 'No items were scanned.';
+            $section['empty_detail'] = $this->getNoMatchDetail($code, $filters, $storeId);
+        } elseif ($section['status'] === self::STATUS_NO_ISSUES) {
+            $section['empty_message'] = count($items) . ' ' . strtolower($label) . ' checked. No SEO issues found.';
+        }
 
         return $section;
     }
 
-    private function calculateScore(int $entities, int $critical, int $warning, int $notice): int
+    private function calculateScore(int $entities, int $critical, int $warning, int $notice): ?int
     {
         if ($entities <= 0) {
-            return 100;
+            return null;
         }
 
         $penalty = ($critical * 18) + ($warning * 8) + ($notice * 3);
@@ -720,9 +782,74 @@ class Analyzer
         return [
             'severity' => $severity,
             'code' => $code,
+            'label' => self::ISSUE_LABELS[$code] ?? ucwords(str_replace('_', ' ', $code)),
+            'category' => self::ISSUE_CATEGORIES[$code] ?? self::CATEGORY_OPTIONAL,
             'message' => $message,
             'recommendation' => $recommendation,
             'ai_fixable' => isset(self::AI_FIXABLE_CODES[$code]),
         ];
+    }
+
+    private function getStatus(int $entities, int $issues): string
+    {
+        if ($entities <= 0) {
+            return self::STATUS_NO_MATCHES;
+        }
+
+        return $issues > 0 ? self::STATUS_OK : self::STATUS_NO_ISSUES;
+    }
+
+    private function sortIssues(array $issues): array
+    {
+        $severityOrder = [self::SEVERITY_CRITICAL => 0, self::SEVERITY_WARNING => 1, self::SEVERITY_NOTICE => 2];
+        $categoryOrder = [self::CATEGORY_CONTENT => 0, self::CATEGORY_URL => 1, self::CATEGORY_STATUS => 2, self::CATEGORY_OPTIONAL => 3];
+        usort($issues, static function (array $a, array $b) use ($severityOrder, $categoryOrder): int {
+            $severityCompare = ($severityOrder[$a['severity'] ?? self::SEVERITY_NOTICE] ?? 9)
+                <=> ($severityOrder[$b['severity'] ?? self::SEVERITY_NOTICE] ?? 9);
+            if ($severityCompare !== 0) {
+                return $severityCompare;
+            }
+
+            return ($categoryOrder[$a['category'] ?? self::CATEGORY_OPTIONAL] ?? 9)
+                <=> ($categoryOrder[$b['category'] ?? self::CATEGORY_OPTIONAL] ?? 9);
+        });
+
+        return $issues;
+    }
+
+    private function getNoMatchDetail(string $sectionCode, array $filters, int $storeId): string
+    {
+        if ($sectionCode === 'cms' && !empty($filters['cms_page_ids'])) {
+            $connection = $this->resourceConnection->getConnection();
+            $pageTable = $this->resourceConnection->getTableName('cms_page');
+            $storeTable = $this->resourceConnection->getTableName('cms_page_store');
+            $existingIds = $connection->fetchCol(
+                $connection->select()
+                    ->from($pageTable, ['page_id'])
+                    ->where('page_id IN (?)', $filters['cms_page_ids'])
+            );
+            if ($existingIds) {
+                $assignedIds = $connection->fetchCol(
+                    $connection->select()
+                        ->from($storeTable, ['page_id'])
+                        ->where('page_id IN (?)', $existingIds)
+                        ->where('store_id IN (?)', [0, $storeId])
+                );
+                if (!array_intersect(array_map('intval', $existingIds), array_map('intval', $assignedIds))) {
+                    return 'The selected CMS page exists, but it is not assigned to this Store View.';
+                }
+            }
+        }
+
+        return $this->getSectionNoMatchDefault($sectionCode);
+    }
+
+    private function getSectionNoMatchDefault(string $sectionCode): string
+    {
+        return [
+            'products' => 'No products matched the selected Store View and filters.',
+            'categories' => 'No categories matched the selected Store View and filters.',
+            'cms' => 'No CMS pages matched the selected Store View and filters.',
+        ][$sectionCode] ?? 'No items matched the selected Store View and filters.';
     }
 }
